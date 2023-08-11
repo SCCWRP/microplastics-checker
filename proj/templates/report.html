@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ report_title }}</title>
+
+</head>
+<body>
+    {% if datatype %}
+
+    <h1>{{ report_title }}</h1>
+    {% for table in tables %}
+        {{ table|safe }}
+    {% endfor %}
+
+    {% else %}
+    <h2>Choose a datatype</h2>
+    <ul class="styled-list">
+        <li><a href="{{request.script_root}}/report?datatype=field">Field</a></li>
+        <li><a href="{{request.script_root}}/report?datatype=chemistry">Chemistry</a></li>
+        <li><a href="{{request.script_root}}/report?datatype=toxicity">Toxicity</a></li>
+        <li><a href="{{request.script_root}}/report?datatype=infauna">Infauna</a></li>
+    </ul>
+      
+
+    {% endif %}
+</body>
+</html>
