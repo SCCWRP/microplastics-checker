@@ -115,7 +115,9 @@ def check_precision(x, precision):
     if 0 < x < 1:
         # if x is a fraction, it doesnt matter. it should be able to go into a numeric field regardless
         return True
+    
     left = int(log10(x)) + 1 if x > 0 else 1
+    
     if 'e-' in str(x):
         # The idea is if the number comes in in scientific notation
         # it will look like 7e11 or something like that

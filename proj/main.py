@@ -117,8 +117,10 @@ def main():
     }
 
     print("before filtering out empty dataframes")
-    # filter out empty dataframes
-    all_dfs = { dfname: df for dfname, df in all_dfs.items() if not df.empty }
+
+    if not CONFIG.get("ALLOW_EMPTY_TABLES"):
+        # filter out empty dataframes
+        all_dfs = { dfname: df for dfname, df in all_dfs.items() if not df.empty }
 
     if len(all_dfs) == 0:
         returnvals = {
@@ -221,15 +223,6 @@ def main():
     # --------------------------------------------------------------------------------------------------------------------------------------- #
 
 
-
-    # this is the same as results['sampleid'] in chemistry (sediment) custom checks. 
-    # checker_labsampleid is created for record purposes so we know how the labsampleid is used after stripping everything with and after the last hyphen.
-    # Based on the assumption of labsampleid always having a format with the characters at the last hyphen and on being removed after meetings Bight Chemistry data.
-    if match_dataset in ['chemistry']:
-        all_dfs['tbl_chemresults']['checker_labsampleid'] = all_dfs['tbl_chemresults'].labsampleid.apply(lambda x: str(x).rpartition('-')[0 if '-' in str(x) else -1]  )
-    if match_dataset in ['chemistry_tissue']:
-        all_dfs['tbl_chemresults_tissue']['checker_labsampleid'] = all_dfs['tbl_chemresults_tissue'].labsampleid.apply(lambda x: str(x).rpartition('-')[0 if '-' in str(x) else -1]  )
-    
     # write all_dfs again to the same excel path
     # Later, if the data is clean, the loading routine will use the tab names to load the data to the appropriate tables
     #   There is an assert statement (in load.py) which asserts that the tab names of the excel file match a table in the database
@@ -367,11 +360,6 @@ def main():
         errs = [e for e in errs if len(e) > 0]
         warnings = [w for w in warnings if len(w) > 0]
 
-        # A certain routine needs to run for tox
-        # If there were errors on the summary table dataframe, then the tox summary has to be added to the all_dfs variable
-        if current_app.config.get("TOXSUMMARY_TABLENAME") in session['table_to_tab_map']:
-            all_dfs[current_app.config.get("TOXSUMMARY_TABLENAME")] = pd.read_excel(session.get('excel_path'), sheet_name=current_app.config.get("TOXSUMMARY_TABLENAME"))
-                
 
         print("DONE - Custom Checks")
 

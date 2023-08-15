@@ -3,19 +3,9 @@ from pandas import isnull, DataFrame, to_datetime, read_sql
 import math
 import numpy as np
 from inspect import currentframe
-from arcgis.geometry.filters import within, contains
-from arcgis.geometry import Point, Polyline, Polygon, Geometry
-from arcgis.geometry import lengths, areas_and_lengths, project
-from arcgis.geometry.functions import intersect as arc_geometry_intersect
 import pandas as pd
 from flask import current_app
 import json
-
-# for trawl distance function
-from shapely.geometry import Point as shapelyPoint
-from shapely.geometry import Polygon as shapelyPolygon
-from shapely.geometry import LineString
-from pyproj import CRS, Transformer
 
 def checkData(tablename, badrows, badcolumn, error_type, error_message = "Error", is_core_error = False, errors_list = [], q = None, **kwargs):
     
@@ -44,45 +34,7 @@ def checkData(tablename, badrows, badcolumn, error_type, error_message = "Error"
             "error_message":error_message
         }
     return {}
-        
 
-
-
-# checkLogic() returns indices of rows with logic errors
-def checkLogic(df1, df2, cols: list, error_type = "Logic Error", df1_name = "", df2_name = "", row_index_col = 'tmp_row'):
-    ''' each record in df1 must have a corresponding record in df2'''
-    print("checkLogic")
-    assert \
-    set([x.lower() for x in cols]).issubset(set(df1.columns)), \
-    "({}) not in columns of {} ({})" \
-    .format(
-        ','.join([x.lower() for x in cols]), df1_name, ','.join(df1.columns)
-    )
-
-    assert \
-    set([x.lower() for x in cols]).issubset(set(df2.columns)), \
-    "({}) not in columns of {} ({})" \
-    .format(
-        ','.join([x.lower() for x in cols]), df2_name, ','.join(df2.columns)
-    )
-
-    # 'Kristin wrote this code in ancient times.'
-    lcols = [x.lower() for x in cols] # lowercase cols
-    tmp_missing_val = 'missing_value'
-    badrowsdf = df1[
-        ~df1[lcols].fillna(tmp_missing_val).isin(df2[lcols].fillna(tmp_missing_val).to_dict(orient='list')).all(axis=1)
-    ]
-    
-    badrows = badrowsdf[row_index_col].tolist() if row_index_col != 'index' else badrowsdf.index.tolist()
-
-    print("end checkLogic")
-
-    return {
-        "badrows": badrows,
-        "badcolumn": ','.join(cols),
-        "error_type": "Logic Error",
-        "error_message": f"""Each record in {df1_name} must have a matching record in {df2_name}. Records are matched on {','.join(cols)}"""
-    }
 
 def mismatch(df1, df2, mergecols = None, left_mergecols = None, right_mergecols = None, row_identifier = 'tmp_row'):
     
@@ -126,20 +78,6 @@ def mismatch(df1, df2, mergecols = None, left_mergecols = None, right_mergecols 
     return badrows
 
 
-def haversine_np(lon1, lat1, lon2, lat2):
-    """
-    Calculate the great circle distance between two points
-    on the earth (specified in decimal degrees)
-
-    All args must be of equal length.
-    """
-    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
-    c = 2 * np.arcsin(np.sqrt(a))
-    m = 6367000 * c
-    return m
 
 def check_time(starttime, endtime):
     df_over = to_datetime(starttime)
@@ -147,26 +85,6 @@ def check_time(starttime, endtime):
     times = (df_over - df_start).astype('timedelta64[m]')
     return abs(times)
 
-def check_distance(df,start_lat,end_lat,start_lon,end_lon):
-    distance = []
-    ct = math.pi/180.0 #conversion factor
-    for index in df.index:
-        dis = math.acos(math.sin(start_lat[index] * ct) * math.sin(end_lat[index] * ct) + math.cos(start_lat[index] * ct)*math.cos(end_lat[index] * ct)*math.cos((end_lon[index] * ct)-(start_lon[index] * ct)))*6371000
-        distance.append(dis)
-    return distance
-
-# courtesy of chatgpt - for the trawl line distance check (100m distance allowed, 200m fior channel islands region)
-def calculate_distance(row):
-    transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)  # Transformer object from WGS84 to pseudo-Mercator EPSG:3857
-
-    # Define point and line
-    point = shapelyPoint(transformer.transform(row['targetlongitude'], row['targetlatitude']))
-    line = LineString([(transformer.transform(row['startlongitude'], row['startlatitude'])), (transformer.transform(row['endlongitude'], row['endlatitude']))])
-    
-    # Calculate distance in meters
-    distance = point.distance(line)
-    
-    return distance  # Distance in meters
 
 def multivalue_lookup_check(df, field, listname, listfield, dbconnection, displayfieldname = None, sep=','):
     """
@@ -207,216 +125,6 @@ def multivalue_lookup_check(df, field, listname, listfield, dbconnection, displa
 
     return args
 
-
-def check_strata_grab(grab, strata_lookup, field_assignment_table):
-    # Get the columns stratum, region from stations_grab_final, merged on stationid.
-    # We need these columns to look up for the polygon the stations are supposed to be in
-    grab = pd.merge(
-        grab, 
-        field_assignment_table.filter(items=['stationid','stratum','region']).drop_duplicates(), 
-        how='left', 
-        on=['stationid']
-    ).merge(
-        # tack on that region exists column because it will show up as True if it exists, NULL otherwise
-        strata_lookup.assign(region_exists_in_featurelayer = True),
-        on = ['region','stratum'],
-        how = 'left'
-    )
-
-    # We essentially make it a critical error when the field assignment doesnt match the feature layer
-    # The reason for this is that it essentially is a server side error rather than a user error
-    # If they are submitting data, and we havent worked that out, that is a big problem that needs to be addressed, so we will raise a critical
-    # If we are on top of it, this should never happen during the entire bight 2023 cycle
-    print("Before assertion")
-    # assert \
-    #     pd.notnull(grab.region_exists_in_featurelayer).all(), \
-    #     "There are region/stratum combinations in the field assignment table that do not match the bight region feature layer"
-    if not pd.notnull(grab.region_exists_in_featurelayer).all():
-        print("THERE IS A PROBLEM")
-        print("There are region/stratum combinations in the field assignment table that do not match the bight region feature layer")
-    print("After assertion")
-
-
-    print("grab after merge")
-    print(grab)
-    # Make the points based on long, lat columns of grab
-    grab['grabpoint'] = grab.apply(
-        lambda row: Point({                
-            "x" :  row['longitude'], 
-            "y" :  row['latitude'], 
-            "spatialReference" : {'latestWkid': 4326, 'wkid': 4326}
-        }),
-        axis=1
-    )
-
-    # Now we check if the points are in associated polygon or not. Assign True if they are in
-    print("Now we check if the points are in associated polygon or not. Assign True if they are in")
-    grab['is_station_in_strata'] = grab.apply(
-        lambda row: row.SHAPE.contains(row['grabpoint']),
-        axis=1
-    )
-
-    # the geojson we give to the browser at the end will expect the point to be in the SHAPE column
-    grab['SHAPE'] = grab.grabpoint
-
-    # geojson will not like this column in there so we will drop it now
-    grab.drop(['grabpoint'], axis = 'columns', inplace = True)
-
-    # Now we get the bad rows
-    bad_df = grab.assign(tmp_row=grab.index).query("is_station_in_strata == False")
-    return bad_df
-
-def check_strata_trawl(trawl, strata_lookup, field_assignment_table):
-    # Get the columns stratum, region from stations_grab_final, merged on stationid.
-    # We need these columns to look up for the polygon the stations are supposed to be in
-    trawl = pd.merge(
-        trawl, 
-        field_assignment_table.filter(items=['stationid','stratum','region']).drop_duplicates(), 
-        how='left', 
-        on=['stationid']
-    ).merge(
-        # tack on that region exists column because it will show up as True if it exists, NULL otherwise
-        strata_lookup.assign(region_exists_in_featurelayer = True),
-        on = ['region','stratum'],
-        how = 'left'
-    )
-    print("trawl")
-    print(trawl)
-
-    # We essentially make it a critical error when the field assignment doesnt match the feature layer
-    # The reason for this is that it essentially is a server side error rather than a user error
-    # If they are submitting data, and we havent worked that out, that is a big problem that needs to be addressed, so we will raise a critical
-    # If we are on top of it, this should never happen during the entire bight 2023 cycle
-    print("Before assertion")
-    # assert \
-    #     pd.notnull(trawl.region_exists_in_featurelayer).all(), \
-    #     "There are region/stratum combinations in the field assignment table that do not match the bight region feature layer"
-    if not pd.notnull(trawl.region_exists_in_featurelayer).all():
-        print("THERE IS A PROBLEM")
-        print("There are region/stratum combinations in the field assignment table that do not match the bight region feature layer")
-    print("After assertion")
-
-
-    # Make the points based on long, lat columns of grab
-    trawl['trawl_line'] = trawl.apply(
-        lambda row: LineString([
-            (row['startlongitude'], row['startlatitude']), (row['endlongitude'], row['endlatitude'])
-        ]),
-        axis=1
-    )
-
-    # make a column of shapely polygons - this will be the bight region polygon to check for intersection with trawl line
-    # We already asserted that there will be no missing values in the SHAPE column
-    print("trawl")
-    print(trawl)
-    trawl['region_polygon'] = trawl.apply(
-        lambda row: 
-        [shapelyPolygon(ring) for ring in row.SHAPE.get('rings')],
-        axis=1
-    )
-    
-    
-    # We are assuming that the region and stratum combination is in the strata lookup list
-    # Now we check if the points are in associated polygon or not. Assign True if they are in
-    trawl['is_station_in_strata'] = trawl.apply(
-        lambda row: 
-        any([polygon.intersects(row.trawl_line) for polygon in row.region_polygon]),
-        axis=1
-    )
-
-    # Need to ensure the SHAPE column is the trawl line as an arcgis geometry Polyline object
-    # This is because there is a function that exports a spatial dataframe to a json which expects this column, as an "ArcGIS API for Python type of object"
-    trawl['SHAPE'] = trawl.trawl_line.apply(lambda line: Polyline({"paths": [list(line.coords)], "spatialReference": {"wkid": 4326}}) )
-
-    # We also should drop the temp columns created in this function, since we dont want them included in the geojson that will be put on the map
-    # these objects are also not json serializable so it makes it difficult, so its better we just drop the columns
-    trawl.drop(['region_polygon','trawl_line'], axis = 'columns', inplace = True)
-
-    print('in the trawl strata check - trawl dataframe')
-
-    print(trawl)
-
-    # Now we get the bad rows
-    bad_df = trawl.assign(tmp_row=trawl.index).query("is_station_in_strata == False")    
-    return bad_df
-
-def export_sdf_to_json(path, sdf):
-    print('path')
-    print(path)
-    print('sdf')
-    print(sdf)
-    if "paths" in sdf['SHAPE'].iloc[0].keys():
-        # data = [
-        #     {
-        #         "type":"polyline",
-        #         "paths" : item.get('paths')[0]
-        #     }
-        #     for item in sdf['SHAPE']
-        # ]
-        data = [
-            {
-                "type" : "Feature",
-                "geometry" : {
-                    "type":"polyline",
-                    "paths" : row.SHAPE.get('paths')
-                },
-                "properties" : {
-                    k:str(v) for k,v in row.items() if k not in ('strata_polygon', 'SHAPE')
-                }
-            }
-
-            for _, row in sdf.iterrows()
-        ]        
-    elif "rings" in sdf['SHAPE'].iloc[0].keys():
-
-        # data = [
-        #     {
-        #         "type":"polygon",
-        #         "rings" : item.get('rings')[0]
-        #     }
-        #     for item in sdf['SHAPE']
-        # ]        
-        data = [
-            {
-                "type" : "Feature",
-                "geometry" : {
-                    "type":"polygon",
-                    "rings" : row.SHAPE.get('rings')
-                },
-                "properties" : {
-                    k:str(v) for k,v in row.items() if k not in ('strata_polygon', 'SHAPE')
-                }
-            }
-
-            for _, row in sdf.iterrows()
-        ]        
-    else:
-        # data = [
-        #     {
-        #         "type":"point",
-        #         "longitude": item["x"],
-        #         "latitude": item["y"]
-        #     }
-        #     for item in sdf.get("SHAPE").tolist()
-        # ]
-        data = [
-            {
-                "type" : "Feature",
-                "geometry" : {
-                    "type":"point",
-                    "longitude": row.SHAPE.get("x"),
-                    "latitude": row.SHAPE.get("y")
-                },
-                "properties" : {
-                    k:str(v) for k,v in row.items() if k not in ('strata_polygon', 'SHAPE')
-                }
-            }
-
-            for _, row in sdf.iterrows()
-        ]        
-    
-    with open(path, "w", encoding="utf-8") as geojson_file:
-       json.dump(data, geojson_file)
 
 # For benthic, we probably have to tack on a column that just contains values that say "Infauna" and then use that as the parameter column
 # For chemistry, we have to tack on the analyteclass column from lu_analytes and then use that as the parameter column
