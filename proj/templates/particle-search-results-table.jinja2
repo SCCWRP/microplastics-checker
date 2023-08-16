@@ -1,0 +1,31 @@
+{% extends 'particle-viewer-base.jinja2' %}
+
+{% block content %}
+    <h2>Search Results</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Particle ID</th>
+                <th>Morphology</th>
+                <th>Color</th>
+                <th>Lab</th>
+                <th>Sample Type</th>
+                <th>Station ID</th>
+                <th>Submission ID</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in data %}
+                <tr>
+                    <td><a href="{{ url_for('photoviewer.index', particleid=record['particleid']) }}">{{ record['particleid'] }}</a></td>
+                    <td>{{ record['morphology'] }}</td>
+                    <td>{{ record['color'] }}</td>
+                    <td>{{ record['lab'] }}</td>
+                    <td>{{ record['sampletype'] }}</td>
+                    <td>{{ record['stationid'] }}</td>
+                    <td>{{ record['submissionid'] }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

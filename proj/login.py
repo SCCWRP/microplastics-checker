@@ -26,7 +26,9 @@ def index():
 
     session['submissionid'] = int(time.time())
     session['submission_dir'] = os.path.join(os.getcwd(), "files", str(session['submissionid']))
+    session['submission_photos_dir'] = os.path.join(os.getcwd(), "files", str(session['submissionid']), "photos" )
     os.mkdir(session['submission_dir'])
+    os.mkdir(session['submission_photos_dir'])
 
     assert \
         len(

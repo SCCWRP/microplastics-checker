@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Viewer</title>
+    <!-- You can add your CSS links here. For example: -->
+    {#
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"> #}
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+    <header>
+        <nav>
+            <!-- Navigation links can be added here. Example: -->
+            <!-- <a href="{{ url_for('homepage.index') }}">Home</a> -->
+        </nav>
+    </header>
+
+    <main>
+        {% block content %}
+        <!-- This block will be overridden by the content of other templates that extend base.jinja2. -->
+        {% endblock %}
+    </main>
+
+    <footer>
+        <!-- You can add footer information here. For example: -->
+        <!-- <p>© 2023 Particle Viewer. All rights reserved.</p> -->
+    </footer>
+
+    <!-- At the bottom of 'particle-viewer-base.jinja2', before the closing </body> tag -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+
+</body>
+
+</html>

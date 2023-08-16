@@ -8,7 +8,7 @@ import subprocess as sp
 from psycopg2.errors import ForeignKeyViolation
 
 import pandas as pd
-import json, os
+import json, os, shutil
 
 finalsubmit = Blueprint('finalsubmit', __name__)
 @finalsubmit.route('/load', methods = ['GET','POST'])
@@ -215,12 +215,6 @@ def load():
         mailserver = current_app.config['MAIL_SERVER'],
         login_info = session.get('login_info')
     )
-    
-    # TODO Need to move submitted and marked files to a separate directory that stores submitted files
-    # I am having a conversation with myself, but present me, disagrees with past me.
-    # The idea behind this is to move them and wipe out the files directory
-    # but if stuff has to get deleted anyways, just delete only the ones that show up in this query
-    # SELECT submissionid FROM submission_tracking_table WHERE submit != 'yes'
 
 
     # They are finally done!
@@ -233,6 +227,34 @@ def load():
         WHERE submissionid = {session.get('submissionid')};
         """
     )
+
+    try:
+        # Move photos to images directory
+        # specific to microplastics
+        # This is mainly for redundancy
+        # We will also use this directory to retrieve images for Leah (or whomever) to view
+        def move_submission_photos(row, image_src_dir, image_dir):
+            destination_directory = os.path.join(image_dir, str(row.submissionid))
+            if not os.path.exists(destination_directory):
+                os.makedirs(destination_directory, exist_ok = True)
+            shutil.copy2(
+                os.path.join(image_src_dir, str(row.photoid)),
+                os.path.join(destination_directory, str(row.photoid))
+            )
+
+        image_src_dir = session.get('submission_photos_dir')
+        image_dir = os.path.join(os.getcwd(), 'images')
+        
+        photos = pd.read_sql(f"SELECT submissionid, photoid FROM tbl_mp_results WHERE submissionid = {session.get('submissionid')}", g.eng)
+
+        photos.apply(
+            lambda row:
+            move_submission_photos(row, image_src_dir, image_dir),
+            axis = 1
+        )
+    except Exception as e:
+        raise Exception(f"Failed moving photos to final images dir for submissionid {session.get('submissionid')}: {e}")
+
 
     # They should not be able to submit with the same SubmissionID
     # Clear session after successful final submit

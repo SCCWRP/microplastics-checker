@@ -198,6 +198,8 @@ def check_test_stations(all_dfs, login_email):
 
     for dfname, df in all_dfs.items():
         if 'stationid' in df.columns:
+
+            # This is before tmp_row is created, we have to use .index here
             badrows = df[ ~df.stationid.isin( [*list(test_station_renaming_key.keys()), *list(test_station_renaming_key.values())] ) ].index.tolist()
 
             if len(badrows) > 0:

@@ -1,0 +1,27 @@
+{% extends 'particle-viewer-base.jinja2' %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Search for a Particle</h2>
+
+    <!-- Flash messages -->
+    {% if get_flashed_messages() %}
+        {% for message in get_flashed_messages() %}
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <form action="{{ url_for('photoviewer.index') }}" method="GET" class="mt-3">
+        <div class="form-group">
+            <label for="particleid">Enter Particle ID:</label>
+            <input type="text" name="particleid" id="particleid" class="form-control" required>
+        </div>
+        <input type="submit" value="Search" class="btn btn-primary">
+    </form>
+</div>
+{% endblock %}

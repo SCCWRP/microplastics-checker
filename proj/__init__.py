@@ -14,6 +14,7 @@ from .scraper import scraper
 from .templater import templater # for dynamic lookup lists called into template before output to user
 from .admin import admin
 from .info import info
+from .photoviewer import photoviewer
 
 CUSTOM_CONFIG_PATH = os.path.join(os.getcwd(), 'proj', 'config')
 
@@ -158,3 +159,4 @@ app.register_blueprint(templater)
 app.register_blueprint(report_bp)
 app.register_blueprint(admin)
 app.register_blueprint(info)
+app.register_blueprint(photoviewer)

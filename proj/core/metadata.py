@@ -67,16 +67,17 @@ def checkPrecision(dataframe, tablename, eng, meta, *args, output = None, **kwar
             (col in meta[meta.udt_name == 'numeric'].column_name.values)
             and (col not in current_app.system_fields)
         ):
-
-            prec = int(
-                meta.iloc[
+            prec_raw = meta.iloc[
                     meta[
                         meta.column_name == col
                     ].index, 
                     meta.columns.get_loc("numeric_precision")
                 ] \
                 .values[0]
-            )
+
+            assert pd.notnull(prec_raw), f"Numeric precision for {col} is null - database is configured incorrectly"
+
+            prec = int(prec_raw)
 
             ret.append(
                 checkData(

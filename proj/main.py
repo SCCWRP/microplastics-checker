@@ -10,7 +10,7 @@ from .preprocess import clean_data, hardcoded_fixes, rename_test_stations, check
 from .match import match
 from .core.core import core
 from .core.functions import fetch_meta
-from .utils.generic import save_errors, correct_row_offset
+from .utils.generic import save_errors, correct_row_offset, clear_directory
 from .utils.excel import mark_workbook
 from .utils.exceptions import default_exception_handler
 from .custom import *
@@ -22,13 +22,14 @@ CONFIG_FILEPATH = os.path.join(CUSTOM_CONFIG_PATH, 'config.json')
 
 assert os.path.exists(CONFIG_FILEPATH), "config.json not found"
 CONFIG = loads(open(CONFIG_FILEPATH, 'r').read())
+SUPPORTED_FILETYPES = CONFIG.get("SUPPORTED_FILETYPES")
 
 max_print_cols = CONFIG.get("DF_PRINT_MAX_COLUMNS")
 max_print_cols = int(max_print_cols) if max_print_cols is not None else max_print_cols
 pd.set_option('display.max_columns', max_print_cols)
 
 upload = Blueprint('upload', __name__)
-@upload.route('/upload',methods = ['GET','POST'])
+@upload.route('/upload', methods = ['GET','POST'])
 def main():
     
     # -------------------------------------------------------------------------- #
@@ -42,39 +43,64 @@ def main():
         
         if sum(['xls' in secure_filename(x.filename).rsplit('.',1)[-1] for x in files]) > 1:
             return jsonify(user_error_msg='You have submitted more than one excel file')
+
+        extensions = [str(secure_filename(x.filename).rsplit('.',1)[-1]).lower() for x in files]
+        bad_filetypes = set(sorted([x for x in extensions if x not in SUPPORTED_FILETYPES]))
+        
+        if len(bad_filetypes) > 0:
+            return jsonify(
+                user_error_msg = f"Unsupported filetype(s) found in your submission: {', '.join(bad_filetypes)}. Supported filetypes are {', '.join(SUPPORTED_FILETYPES)}"
+            )
+
+        # If they gave us photos, assume they want to reset the photos that they are submitting
+        if set(['jpg','png']).issubset(set(extensions)):
+            clear_directory(session['submission_photos_dir'])
+
         
         for f in files:
-            # i'd like to figure a way we can do it without writing the thing to an excel file
-            f = files[0]
-            filename = secure_filename(f.filename)
 
-            # if file extension is xlsx/xls (hopefully xlsx)
-            excel_path = os.path.join( session['submission_dir'], str(filename) )
+            tmpfilename = secure_filename(f.filename)
 
-            # the user's uploaded excel file can now be read into pandas
-            f.save(excel_path)
+            extension = str(tmpfilename.rsplit('.',1)[-1]).lower()
 
-            # To be accessed later by the upload routine that loads data to the tables
-            session['excel_path'] = excel_path
-            
-            # Put their original filename in the submission tracking table
-            g.eng.execute(
-                f"""
-                UPDATE submission_tracking_table 
-                SET original_filename = '{filename}' 
-                WHERE submissionid = {session.get('submissionid')};
-                """
-            )
+            if extension in ('xls','xlsx'):
+                
+                # filename is used throughout the script
+                # if it is a photo, its not so relevant
+                filename = tmpfilename
+                
+                # if file extension is xlsx/xls (hopefully xlsx)
+                excel_path = os.path.join( session['submission_dir'], str(filename) )
+
+                # the user's uploaded excel file can now be read into pandas
+                f.save(excel_path)
+
+                # To be accessed later by the upload routine that loads data to the tables
+                session['excel_path'] = excel_path
+                
+                # Put their original filename in the submission tracking table
+                g.eng.execute(
+                    f"""
+                    UPDATE submission_tracking_table 
+                    SET original_filename = '{filename}' 
+                    WHERE submissionid = {session.get('submissionid')};
+                    """
+                )
+            else:
+                # The only other case would be if it is a photo, since now supported filetypes are set to jpg and png
+                # The only other supported filetypes should be images
+                f.save(os.path.join( session['submission_photos_dir'], str(tmpfilename) ))
+
 
     else:
         return jsonify(user_error_msg="No file given")
 
     # We are assuming filename is an excel file
-    if '.xls' not in filename:
-        errmsg = f"filename: {filename} appears to not be what we would expect of an excel file.\n"
-        errmsg += "As of right now, the application can accept one excel file at a time.\n"
-        errmsg += "If you are submitting data for multiple tables, they should be separate tabs in the excel file."
-        return jsonify(user_error_msg=errmsg)
+    # if '.xls' not in filename:
+    #     errmsg = f"filename: {filename} appears to not be what we would expect of an excel file.\n"
+    #     errmsg += "As of right now, the application can accept one excel file at a time.\n"
+    #     errmsg += "If you are submitting data for multiple tables, they should be separate tabs in the excel file."
+    #     return jsonify(user_error_msg=errmsg)
 
     print("DONE uploading files")
 

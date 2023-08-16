@@ -35,47 +35,50 @@ def microplastics(all_dfs):
     samplereceiving = all_dfs.get('tbl_mp_samplereceiving')
 
     args = {
-            "dataframe": pd.DataFrame(),
-            "tablename": "",
-            "badrows": [],
-            "badcolumn": "",
-            "error_type": "",
-            "is_core_error": False,
-            "error_message": ""
+        "dataframe": pd.DataFrame(),
+        "tablename": "",
+        "badrows": [],
+        "badcolumn": "",
+        "error_type": "",
+        "is_core_error": False,
+        "error_message": ""
     }
     
     labinfo_args = args.update({
-            "dataframe": labinfo,
-            "tablename": "tbl_mp_labinfo"
+        "dataframe": labinfo,
+        "tablename": "tbl_mp_labinfo"
     })
     instrumentinfo_args = args.update({
-            "dataframe": instrumentinfo,
-            "tablename": "tbl_mp_instrumentinfo"
+        "dataframe": instrumentinfo,
+        "tablename": "tbl_mp_instrumentinfo"
     })
     microscopy_args = args.update({
-            "dataframe": microscopy,
-            "tablename": "tbl_mp_microscopysettings"
+        "dataframe": microscopy,
+        "tablename": "tbl_mp_microscopysettings"
     })
     raman_args = args.update({
-            "dataframe": raman,
-            "tablename": "tbl_mp_ramansettings"
+        "dataframe": raman,
+        "tablename": "tbl_mp_ramansettings"
     })
     ftir_args = args.update({
-            "dataframe": ftir,
-            "tablename": "tbl_mp_ftirsettings"
+        "dataframe": ftir,
+        "tablename": "tbl_mp_ftirsettings"
     })
     results_args = args.update({
-            "dataframe": results,
-            "tablename": "tbl_mp_results"
+        "dataframe": results,
+        "tablename": "tbl_mp_results"
     })
     samplereceiving_args = args.update({
-            "dataframe": samplereceiving,
-            "tablename": "tbl_mp_samplereceiving"
+        "dataframe": samplereceiving,
+        "tablename": "tbl_mp_samplereceiving"
     })
     sampleextraction_args = args.update({
-            "dataframe": sampleextraction,
-            "tablename": "tbl_mp_sampleextraction"
+        "dataframe": sampleextraction,
+        "tablename": "tbl_mp_sampleextraction"
     })
+
+
+
 
     
 

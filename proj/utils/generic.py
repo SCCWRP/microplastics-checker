@@ -1,3 +1,5 @@
+import os
+import shutil
 from json import dump
 from pandas import DataFrame
 from inspect import currentframe
@@ -92,5 +94,22 @@ def save_errors(errs, filepath):
         errors_file
     )
     errors_file.close()
+
+
+
+def clear_directory(directory_path):
+    for filename in os.listdir(directory_path):
+        file_path = os.path.join(directory_path, filename)
+        
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            # allows the error message to be slightly more helpful
+            # We definitely shouldnt just let it slide if a file failed to delete, but rather we should be notified
+            raise Exception(f'Failed to delete {file_path}. Reason: {e}')
+
 
 
