@@ -22,9 +22,19 @@
     </header>
 
     <main>
+        {% if AUTHORIZED %}
         {% block content %}
         <!-- This block will be overridden by the content of other templates that extend base.jinja2. -->
         {% endblock %}
+        {% else %}
+        <div class="container mt-5">
+            <form id="adminpw-form" action="{{url_for('photoviewer.auth')}}">
+            <label for="adminpw">Enter the password to view photos (It is probably what you think it is)</label>
+                <input type="password" name="adminpw">
+                <button type="submit">Submit</button>
+            </form>
+        </div>
+        {% endif%}
     </main>
 
     <footer>
@@ -36,6 +46,32 @@
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script>
+        document.getElementById('adminpw-form')?.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var formData = new FormData(this);
+
+            // Post the form data using the fetch API
+            fetch(this.action, {
+                method: 'POST',
+                body: formData,
+            })
+                .then(response => response.json()) // assuming server responds with json
+                .then(data => {
+                    // Here you can handle the response from the server. 
+                    // For example, you might check if the authentication was successful.
+                    if (data.success) {
+                        location.reload(); // Reload the page if authentication is successful
+                    } else {
+                        alert(data.message || 'Authentication failed');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        });
+
+    </script>
 
 
 </body>

@@ -16,7 +16,7 @@ def index():
 
     if particleid is None:
         # ParticleID not found in the query string arguments
-        return render_template('particle-search.jinja2')
+        return render_template('particle-search.jinja2', AUTHORIZED = session.get('AUTHORIZED_FOR_ADMIN_FUNCTIONS'))
     
     # prevent sql injection
     particleid = str(particleid).replace("'","").replace('"','').replace(';','')
@@ -33,19 +33,19 @@ def index():
             f"SELECT particleid, morphology, color, photoid, lab, sampletype, stationid, submissionid FROM tbl_mp_results WHERE photoid = '{photoid}';", 
             g.eng
         )
-        return render_template('particle-photo-display.jinja2', data = data.to_dict('records'), current_particle = particleid)
+        return render_template('particle-photo-display.jinja2', data = data.to_dict('records'), current_particle = particleid, AUTHORIZED = session.get('AUTHORIZED_FOR_ADMIN_FUNCTIONS'))
 
     elif len(data) > 1:
         # Display a table with info for each particle found in the search result
         # rows of table should link to the corresponding particle-photo-display template (which is this same route) 
         #   This should be accomplished by having an href with the particleid in the query string
-        return render_template('particle-search-results-table.jinja2', data = data.to_dict('records'), particle_search_query = particleid )
+        return render_template('particle-search-results-table.jinja2', data = data.to_dict('records'), particle_search_query = particleid, AUTHORIZED = session.get('AUTHORIZED_FOR_ADMIN_FUNCTIONS'))
 
     else:
         # This is the case where we got an empty dataframe
         # This means no particles were found in the search results
         flash(f"No search result found for particle: {particleid}")
-        return render_template('particle-search.jinja2')
+        return render_template('particle-search.jinja2', AUTHORIZED = session.get('AUTHORIZED_FOR_ADMIN_FUNCTIONS'))
 
 
 
@@ -65,17 +65,12 @@ def get_photo(photoid):
 
 
 
-@photoviewer.route('/auth', methods = ['GET','POST'])
+@photoviewer.route('/particle-auth', methods = ['GET','POST'])
 def auth():
 
-    # I put a link in the schema page for some who want to edit the schema to sign in
-    # I put schema as as query string arg to show i want them to be redirected there after they sign in
-    if request.args.get("redirect_to"):
-        return render_template('admin_password.html', redirect_route=request.args.get("redirect_to"))
-
-    adminpw = request.get_json().get('adminpw')
+    adminpw = request.form.get('adminpw')
     if adminpw == os.environ.get("ADMIN_FUNCTION_PASSWORD"):
         session['AUTHORIZED_FOR_ADMIN_FUNCTIONS'] = True
+        
 
-
-    return jsonify(message=str(session.get("AUTHORIZED_FOR_ADMIN_FUNCTIONS")).lower())
+    return jsonify( success=(session.get("AUTHORIZED_FOR_ADMIN_FUNCTIONS") == True) )
