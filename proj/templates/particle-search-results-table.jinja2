@@ -1,8 +1,9 @@
 {% extends 'particle-viewer-base.jinja2' %}
 
 {% block content %}
-    <h2>Search Results</h2>
-    <table>
+<div class="container mt-5">
+    <h3 class="mb-4">Search Results for: "{{ particle_search_query }}"</h3>
+    <table class="table table-bordered table-hover">
         <thead>
             <tr>
                 <th>Particle ID</th>
@@ -28,4 +29,5 @@
             {% endfor %}
         </tbody>
     </table>
+</div>
 {% endblock %}

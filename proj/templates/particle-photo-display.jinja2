@@ -27,7 +27,7 @@
                 </thead>
                 <tbody>
                     {% for record in data %}
-                        <tr>
+                        <tr {% if current_particle == record['particleid'] %} style="background-color: #bcf7cc;font-weight:bold;" {% endif %}>
                             <td>{{ record['particleid'] }}</td>
                             <td>{{ record['morphology'] }}</td>
                             <td>{{ record['color'] }}</td>

@@ -21,7 +21,7 @@ def index():
     # prevent sql injection
     particleid = str(particleid).replace("'","").replace('"','').replace(';','')
     
-    sql = "SELECT particleid, morphology, color, photoid, lab, sampletype, stationid, submissionid FROM tbl_mp_results WHERE particleid = %s;"
+    sql = "SELECT particleid, morphology, color, photoid, lab, sampletype, stationid, submissionid FROM tbl_mp_results WHERE particleid ~ %s;"
     data = pd.read_sql(sql, g.eng, params=(particleid,))
 
 
@@ -33,13 +33,13 @@ def index():
             f"SELECT particleid, morphology, color, photoid, lab, sampletype, stationid, submissionid FROM tbl_mp_results WHERE photoid = '{photoid}';", 
             g.eng
         )
-        return render_template('particle-photo-display.jinja2', data = data.to_dict('records'))
+        return render_template('particle-photo-display.jinja2', data = data.to_dict('records'), current_particle = particleid)
 
     elif len(data) > 1:
         # Display a table with info for each particle found in the search result
         # rows of table should link to the corresponding particle-photo-display template (which is this same route) 
         #   This should be accomplished by having an href with the particleid in the query string
-        return render_template('particle-search-results-table.jinja2', data = data.to_dict('records'))
+        return render_template('particle-search-results-table.jinja2', data = data.to_dict('records'), particle_search_query = particleid )
 
     else:
         # This is the case where we got an empty dataframe
