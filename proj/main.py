@@ -44,8 +44,8 @@ def main():
         if sum(['xls' in secure_filename(x.filename).rsplit('.',1)[-1] for x in files]) > 1:
             return jsonify(user_error_msg='You have submitted more than one excel file')
 
-        extensions = [str(secure_filename(x.filename).rsplit('.',1)[-1]).lower() for x in files]
-        bad_filetypes = set(sorted([x for x in extensions if x not in SUPPORTED_FILETYPES]))
+        extensions = {str(secure_filename(x.filename).rsplit('.',1)[-1]).lower() for x in files}
+        bad_filetypes = {x for x in extensions if x not in SUPPORTED_FILETYPES}
         
         if len(bad_filetypes) > 0:
             return jsonify(
@@ -53,7 +53,7 @@ def main():
             )
 
         # If they gave us photos, assume they want to reset the photos that they are submitting
-        if set(['jpg','png']).issubset(set(extensions)):
+        if 'jpg' in extensions or 'png' in extensions:
             clear_directory(session['submission_photos_dir'])
 
         
