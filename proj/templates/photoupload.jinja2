@@ -1,0 +1,34 @@
+    <!doctype html>
+    <html lang="en">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Upload Images</title>
+        {{ dropzone.load_css() }}
+        {{ dropzone.load_js() }}
+        {{ dropzone.config() }}
+        <script>
+            Dropzone.options.myDropzone = {
+                chunking: true,
+                chunkSize: 2000000, // Size of chunks in bytes (here, 2 MB)
+                parallelChunkUploads: true // Whether to upload chunks in parallel (might increase load on server)
+            };
+        </script>
+    </head>
+
+    <body>
+        <h1>Upload Images</h1>
+        {{ dropzone.create(action=url_for("photoviewer.photoupload")) }}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <ul>
+            {% for category, message in messages %}
+            <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+    </body>
+
+    </html>
