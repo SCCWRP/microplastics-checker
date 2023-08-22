@@ -187,9 +187,9 @@ def check_microscopy_instrument_settings(method, results, instrument_settings):
         suffixes = (None, "_instrument")
     )
     # because of left join, if any records of the matched_columns in the results tab
-    # don't have a record in the ramansettings tab, these records will be na, therefore we look
-    # for any na values in these columns by row. then the badrows are the tmp_row values of that
-    # row
+    # don't have a record in the [raman/ftir/microscopy]settings tab, these records will be na, 
+    # therefore we look for any na values in these columns by row. then the badrows are the tmp_row 
+    # values of that row
     merged_settings['is_bad_row'] = merged_settings[matched_columns].isna().apply(lambda x: x.any(), axis = 1)
     badrows = merged_settings[merged_settings['is_bad_row']].tmp_row.tolist()
     return badrows
