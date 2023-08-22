@@ -174,3 +174,22 @@ def check_samplenumber_sequence(df_to_check, col, samplenumbercol):
         .tmp_row \
         .tolist()
     return badrows
+
+# check raman, ftir, or stereoscope settings records
+def check_microscopy_instrument_settings(method, results, instrument_settings):
+    matched_columns = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction']
+    results_subset = results[results[method] == 'Yes']
+    merged_settings = results_subset.merge(
+        instrument_settings, 
+        how = 'left', 
+        left_on = matched_columns,
+        right_on = matched_columns,
+        suffixes = (None, "_instrument")
+    )
+    # because of left join, if any records of the matched_columns in the results tab
+    # don't have a record in the ramansettings tab, these records will be na, therefore we look
+    # for any na values in these columns by row. then the badrows are the tmp_row values of that
+    # row
+    merged_settings['is_bad_row'] = merged_settings[matched_columns].isna().apply(lambda x: x.any(), axis = 1)
+    badrows = merged_settings[merged_settings['is_bad_row']].tmp_row.tolist()
+    return badrows
