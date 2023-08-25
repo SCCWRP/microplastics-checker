@@ -1,7 +1,7 @@
 # Dont touch this file! This is intended to be a template for implementing new custom checks
 from inspect import currentframe
 from flask import current_app, g, session
-from .functions import checkData, mismatch, check_microscopy_instrument_settings
+from .functions import checkData, mismatch
 import pandas as pd
 import os
 
@@ -63,39 +63,6 @@ def microplastics(all_dfs):
         "is_core_error": False,
         "error_message": ""
     }
-    
-    labinfo_args = args.update({
-        "dataframe": labinfo,
-        "tablename": "tbl_mp_labinfo"
-    })
-    instrumentinfo_args = args.update({
-        "dataframe": instrumentinfo,
-        "tablename": "tbl_mp_instrumentinfo"
-    })
-    microscopy_args = args.update({
-        "dataframe": microscopy,
-        "tablename": "tbl_mp_microscopysettings"
-    })
-    raman_args = args.update({
-        "dataframe": raman,
-        "tablename": "tbl_mp_ramansettings"
-    })
-    ftir_args = args.update({
-        "dataframe": ftir,
-        "tablename": "tbl_mp_ftirsettings"
-    })
-    results_args = args.update({
-        "dataframe": results,
-        "tablename": "tbl_mp_results"
-    })
-    samplereceiving_args = args.update({
-        "dataframe": samplereceiving,
-        "tablename": "tbl_mp_samplereceiving"
-    })
-    sampleextraction_args = args.update({
-        "dataframe": sampleextraction,
-        "tablename": "tbl_mp_sampleextraction"
-    })
 
 
 
@@ -121,15 +88,17 @@ def microplastics(all_dfs):
 
     uploaded_photoids = os.listdir(session['submission_photos_dir'])
 
-    args.update({
-        "dataframe": results,
-        "tablename": "tbl_mp_results",
-        "badrows": results[~results['photoid'].isin(uploaded_photoids)].tmp_row.tolist(), 
-        "badcolumn": "photoid",
-        "error_type": "Logic Error",
-        "error_message": "PhotoID of tbl_mp_results tab must have a matching uploaded photo"
-    })
-    errs = [*errs, checkData(**args)]
+    errs = [
+        *errs,
+        checkData(
+            dataframe = results,
+            tablename = "tbl_mp_results",
+            badrows = results[~results['photoid'].isin(uploaded_photoids)].tmp_row.tolist(), 
+            badcolumn = "photoid",
+            error_type = "Logic Error",
+            error_message = "PhotoID of tbl_mp_results tab must have a matching uploaded photo"
+        )
+    ]
 
     # END OF CHECK - PhotoID of tbl_mp_results tab must have a matching uploaded photo (🛑 ERROR 🛑)
     print("# END OF CHECK - PhotoID of tbl_mp_results tab must have a matching uploaded photo")
@@ -148,15 +117,17 @@ def microplastics(all_dfs):
     # print(results['photoid'])
     # print(pd.Series(uploaded_photoids).isin(results['photoid']))
     if not pd.Series(uploaded_photoids).isin(results['photoid']).all():
-        args.update({
-            "dataframe": results,
-            "tablename": "tbl_mp_results",
-            "badrows": results.tmp_row.tolist(), 
-            "badcolumn": "photoid",
-            "error_type": "Logic Error",
-            "error_message": "All uploaded photos must have a matching PhotoID in tbl_mp_results tab"
-        })
-        errs = [*errs, checkData(**args)]
+        errs = [
+            *errs,
+            checkData(
+                dataframe = results,
+                tablename = "tbl_mp_results",
+                badrows = results.tmp_row.tolist(), 
+                badcolumn = "photoid",
+                error_type = "Logic Error",
+                error_message = "All uploaded photos must have a matching PhotoID in tbl_mp_results tab"
+            )
+        ]
 
 
     # END OF CHECK - Photo uploaded must match their submission (PhotoID column in the tbl_mp_results tab) (🛑 ERROR 🛑)
@@ -173,15 +144,17 @@ def microplastics(all_dfs):
 
     unique_photoids = pd.read_sql('SELECT DISTINCT photoid from tbl_mp_results', g.eng)
 
-    args.update({
-        "dataframe": results,
-        "tablename": "tbl_mp_results",
-        "badrows": results[results['photoid'].isin(unique_photoids)].tmp_row.tolist(), 
-        "badcolumn": "photoid",
-        "error_type": "Logic Error",
-        "error_message": "PhotoID of tbl_mp_results tab must have a matching uploaded photo"
-    })
-    errs = [*errs, checkData(**args)]
+    errs = [
+        *errs,
+        checkData(
+            dataframe = results,
+            tablename = "tbl_mp_results",
+            badrows = results[results['photoid'].isin(unique_photoids)].tmp_row.tolist(), 
+            badcolumn = "photoid",
+            error_type = "Logic Error",
+            error_message = "PhotoID of tbl_mp_results tab must have a matching uploaded photo"
+        )
+    ]
 
     # END OF CHECK - Cannot upload a photo with a filename that matches on that was previously used in a previous submission (🛑 ERROR 🛑)
     print("# END OF CHECK - Cannot upload a photo with a filename that matches on that was previously used in a previous submission")
@@ -209,20 +182,26 @@ def microplastics(all_dfs):
     # (🛑 ERROR 🛑)
     # Created Coder: Nick Lombardo
     # Created Date: 08/21/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 08/24/23
+    # Last Edited Coder: Nick Lombardo
+    # NOTE (08/24/23): Updated to use the generic mismatch function instead
     
     if not results[results['raman'] == 'Yes'].empty:
-        args.update({
-            "dataframe": results,
-            "tablename": "tbl_mp_results",
-            "badrows": check_microscopy_instrument_settings('raman', results, raman), 
-            "badcolumn": "raman",
-            "error_type": "Logic Error",
-            "error_message": "There must be a corresponding record in the ramansettings table"
-        })
-        errs = [*errs, checkData(**args)]
+        errs = [
+            *errs,
+            checkData(
+                dataframe = results,
+                tablename = "tbl_mp_results",
+                badrows = mismatch(
+                    df1 = results[results['raman'] == 'Yes'],
+                    df2 = raman,
+                    mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                ), 
+                badcolumn = "raman",
+                error_type = "Logic Error",
+                error_message = "There must be a corresponding record in the ramansettings table"
+            )
+        ]
 
 
     # END OF CHECK - If Raman = 'Yes' (in results table) then there must be a corresponding record in the ramansettings table 
@@ -236,17 +215,44 @@ def microplastics(all_dfs):
     # CHECK - If FTIR = 'Yes' (in results table) then there must be a corresponding record in the ftirsettings table 
     #   Records must match on StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
     # (🛑 ERROR 🛑)
-    
+    # Created Coder: Nick Lombardo
+    # Created Date: 08/21/23
+    # Last Edited Date: 08/25/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (MM/DD/YY): Added LabBatch and FieldRep to the columns that the dataframes match on
+
     if not results[results['ftir'] == 'Yes'].empty:
-        args.update({
-            "dataframe": results,
-            "tablename": "tbl_mp_results",
-            "badrows": check_microscopy_instrument_settings('ftir', results, ftir), 
-            "badcolumn": "ftir",
-            "error_type": "Logic Error",
-            "error_message": "There must be a corresponding record in the ftirsettings table"
-        })
-        errs = [*errs, checkData(**args)]
+        errs = [
+            *errs,
+            checkData(
+                dataframe = results,
+                tablename = "tbl_mp_results",
+                badrows = mismatch(
+                    df1 = results[results['ftir'] == 'Yes'],
+                    df2 = ftir,
+                    mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                ), 
+                badcolumn = "ftir",
+                error_type = "Logic Error",
+                error_message = "There must be a corresponding record in the ftirsettings table"
+            )
+        ]
+
+        errs = [
+            *errs,
+            checkData(
+                dataframe = ftir,
+                tablename = "tbl_mp_ftirsettings",
+                badrows = mismatch(
+                    df1 = ftir,
+                    df2 = results[results['ftir'] == 'Yes'],
+                    mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                ), 
+                badcolumn = "sampleid",
+                error_type = "Logic Error",
+                error_message = "There must be a corresponding record in the results table"
+            )
+        ]
 
 
     # END OF CHECK - If FTIR = 'Yes' (in results table) then there must be a corresponding record in the ftirsettings table 
@@ -261,18 +267,45 @@ def microplastics(all_dfs):
     # CHECK - If stereoscope = 'Yes' (in results table) then there must be a corresponding record in the microscopysettings table 
     #   Records must match on StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
     # (🛑 ERROR 🛑)
+    # Created Coder: Nick Lombardo
+    # Created Date: 08/21/23
+    # Last Edited Date: 08/25/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (MM/DD/YY): Added LabBatch and FieldRep to the columns that the dataframes match on
     
     if not results[results['stereoscope'] == 'Yes'].empty:
-        args.update({
-            "dataframe": results,
-            "tablename": "tbl_mp_results",
-            "badrows": check_microscopy_instrument_settings('stereoscope', results, microscopy), 
-            "badcolumn": "stereoscope",
-            "error_type": "Logic Error",
-            "error_message": "There must be a corresponding record in the microscopysettings table"
-        })
-        errs = [*errs, checkData(**args)]
 
+        errs = [
+            *errs,
+            checkData(
+                dataframe = results,
+                tablename = "tbl_mp_results",
+                badrows = mismatch(
+                    df1 = results[results['stereoscope'] == 'Yes'],
+                    df2 = microscopy,
+                    mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                ), 
+                badcolumn = "stereoscope",
+                error_type = "Logic Error",
+                error_message = "There must be a corresponding record in the microscopysettings table"
+            )
+        ]
+
+        errs = [
+            *errs,
+            checkData(
+                dataframe = microscopy,
+                tablename = "tbl_mp_microscopysettings",
+                badrows = mismatch(
+                    df1 = microscopy,
+                    df2 = results[results['stereoscope'] == 'Yes'],
+                    mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                ), 
+                badcolumn = "sampleid",
+                error_type = "Logic Error",
+                error_message = "There must be a corresponding record in the results table"
+            )
+        ]
 
 
     # END OF CHECK - If stereoscope = 'Yes' (in results table) then there must be a corresponding record in the microscopysettings table 
@@ -296,19 +329,187 @@ def microplastics(all_dfs):
     
     #   The matching should be done on lab and matrix
     # (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler
+    # Created Date: 08/24/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    print('# Get existing instrumentinfo records for the lab(s) that are being submitted')
+    # Get existing instrumentinfo records for the lab(s) that are being submitted
+    # There shouldnt be more than one lab in a submission but technically there can be
+    instrumentinfo_db = pd.read_sql(
+        f"""SELECT * FROM tbl_mp_instrumentinfo WHERE lab IN {tuple(labinfo.lab.astype(str))}""", 
+        g.eng
+    )
     
+    print('# Drop columns not in the instrument info tab - such as login_, submissionid, etc')
+    # Drop columns not in the instrument info tab - such as login_, submissionid, etc
+    instrumentinfo_db.drop( list(set(instrumentinfo_db.columns) - set(instrumentinfo.columns)) , axis = 'columns', inplace = True)
+
+    # Only column in instrumentinfo that isnt in the database should be tmp_row
+    instrumentinfo_db['tmp_row'] = instrumentinfo_db.index
+    
+    print('# Concat with the submission dataframe instrument info')
+    # Concat with the submission dataframe instrument info
+    instrumentinfo_combined = pd.concat([instrumentinfo, instrumentinfo_db], ignore_index=True)
 
     # Raman
+    # Created Coder: Robert Butler
+    # Created Date: 08/24/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
     print("# Raman")
+    args.update({
+        "dataframe": results,
+        "tablename": "tbl_mp_results",
+        # 'Yes' and 'Raman' come from lookup list values so the capitalization will match
+        # It is unlikely that the lookup list values will change
+        "badrows": mismatch(
+            results[results.raman == 'Yes'], 
+            instrumentinfo_combined[instrumentinfo_combined.instrumenttype == 'Raman'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "Raman",
+        "error_type": "Logic Error",
+        "error_message": """For each record in the "Results" tab where the 'Raman' column says 'Yes', there must be a matching record in the "Instrument Info" tab where the 'InstrumentType' is 'Raman'. Records are matched based on 'lab' and 'matrix'."""
+    })
+    errs = [*errs, checkData(**args)]
 
-    # FTIR
+    # check the other direction
+    args.update({
+        "dataframe": instrumentinfo,
+        "tablename": "tbl_mp_instrumentinfo",
+        # 'Yes' and 'Raman' come from lookup list values so the capitalization will match
+        "badrows": mismatch(
+            instrumentinfo[instrumentinfo.instrumenttype == 'Raman'], 
+            results[results.raman == 'Yes'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "InstrumentType",
+        "error_type": "Logic Error",
+        "error_message": """For each record in the "InstrumentInfo" tab where the 'InstrumentType' is 'Raman', there must be a matching record in the "Results" tab where the 'Raman' column says 'Yes'. Records are matched based on 'lab' and 'matrix'."""
+    })
+    errs = [*errs, checkData(**args)]
+
+    # FTIR -------------------------
+    # Created Coder: Robert Butler
+    # Created Date: 08/24/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
     print("# FTIR")
+    args.update({
+        "dataframe": results,
+        "tablename": "tbl_mp_results",
+        # 'Yes' and 'FTIR' come from lookup list values so the capitalization will match
+        "badrows": mismatch(
+            results[results.ftir == 'Yes'], 
+            instrumentinfo_combined[instrumentinfo_combined.instrumenttype == 'FTIR'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "FTIR",
+        "error_type": "Logic Error",
+        "error_message": """For each record in the "Results" tab where the 'FTIR' column says 'Yes', there must be a matching record in the "Instrument Info" tab where the 'InstrumentType' is 'FTIR'. Records are matched based on 'lab' and 'matrix'."""
+    })
+    errs = [*errs, checkData(**args)]
 
-    # Stereoscope
+    # check the other direction
+    args.update({
+        "dataframe": instrumentinfo,
+        "tablename": "tbl_mp_instrumentinfo",
+        # 'Yes' and 'FTIR' come from lookup list values so the capitalization will match
+        "badrows": mismatch(
+            instrumentinfo[instrumentinfo.instrumenttype == 'FTIR'], 
+            results[results.ftir == 'Yes'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "InstrumentType",
+        "error_type": "Logic Error",
+        "error_message": """For each record in the "InstrumentInfo" tab where the 'InstrumentType' is 'FTIR', there must be a matching record in the "Results" tab where the 'FTIR' column says 'Yes'. Records are matched based on 'lab' and 'matrix'."""
+    })
+    errs = [*errs, checkData(**args)]
+
+
+
+    # Stereoscope ------------------------------
+    # Created Coder: Robert Butler
+    # Created Date: 08/24/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
     print("# Stereoscope")
+    args.update({
+        "dataframe": results,
+        "tablename": "tbl_mp_results",
+        # 'Yes' and 'Stereoscope' come from lookup list values so the capitalization will match
+        "badrows": mismatch(
+            results[results.stereoscope == 'Yes'], 
+            instrumentinfo_combined[instrumentinfo_combined.instrumenttype == 'Stereoscope'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "Stereoscope",
+        "error_type": "Logic Error",
+        "error_message": """For each record in the "Results" tab where the 'Stereoscope' column says 'Yes', there must be a matching record in the "Instrument Info" tab where the 'InstrumentType' is 'Stereoscope'. Records are matched based on 'lab' and 'matrix'."""
+    })
+    errs = [*errs, checkData(**args)]
 
-    # Other
+    # check the other direction
+    args.update({
+        "dataframe": instrumentinfo,
+        "tablename": "tbl_mp_instrumentinfo",
+        # 'Yes' and 'Stereoscope' come from lookup list values so the capitalization will match
+        "badrows": mismatch(
+            instrumentinfo[instrumentinfo.instrumenttype == 'Stereoscope'], 
+            results[results.stereoscope == 'Yes'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "InstrumentType",
+        "error_type": "Logic Error",
+        "error_message": """For each record in the "InstrumentInfo" tab where the 'InstrumentType' is 'Stereoscope', there must be a matching record in the "Results" tab where the 'Stereoscope' column says 'Yes'. Records are matched based on 'lab' and 'matrix'."""
+    })
+    errs = [*errs, checkData(**args)]
+
+
+
+    # Other --------------------
+    # Created Coder: Robert Butler
+    # Created Date: 08/24/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
     print("# Other")
+    args.update({
+        "dataframe": results,
+        "tablename": "tbl_mp_results",
+        # 'Yes' and 'Other' come from lookup list values so the capitalization will match
+        "badrows": mismatch(
+            results[results.other_instrument_used == 'Yes'], 
+            instrumentinfo_combined[instrumentinfo_combined.instrumenttype == 'Other'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "other_instrument_used",
+        "error_type": "Logic Error",
+        "error_message": """For each record in the "Results" tab where the 'other_instrument_used' column says 'Yes', there must be a matching record in the "Instrument Info" tab where the 'InstrumentType' is 'Other'. Records are matched based on 'lab' and 'matrix'."""
+    })
+    errs = [*errs, checkData(**args)]
+
+    # check the other direction
+    args.update({
+        "dataframe": instrumentinfo,
+        "tablename": "tbl_mp_instrumentinfo",
+        # 'Yes' and 'Other' come from lookup list values so the capitalization will match
+        "badrows": mismatch(
+            instrumentinfo[instrumentinfo.instrumenttype == 'Other'], 
+            results[results.other_instrument_used == 'Yes'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "InstrumentType",
+        "error_type": "Logic Error",
+        "error_message": """For each record in the "InstrumentInfo" tab where the 'InstrumentType' is 'Other', there must be a matching record in the "Results" tab where the 'other_instrument_used' column says 'Yes'. Records are matched based on 'lab' and 'matrix'."""
+    })
+    errs = [*errs, checkData(**args)]
 
     # END OF CHECKS - for each "instrument" column which says "Yes" in the results table, there must be a corresponding instrumentinfo record 
     #   (e.g. If Raman = "Yes" then...
@@ -329,6 +530,24 @@ def microplastics(all_dfs):
     # CHECKS - Each record in Results must have a matching record in SampleExtraction (and vice versa)
     #   Results Table matches SampleExtraction on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
     # (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler
+    # Created Date: 08/24/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    args.update({
+        "dataframe": results,
+        "tablename": "tbl_mp_results",
+        "badrows": mismatch(
+            instrumentinfo[instrumentinfo.instrumenttype == 'Other'], 
+            results[results.other_instrument_used == 'Yes'], 
+            mergecols = ['lab', 'matrix']
+        ), 
+        "badcolumn": "InstrumentType",
+        "error_type": "Logic Error",
+        "error_message": ""
+    })
+    errs = [*errs, checkData(**args)]
     
     # END CHECKS - Each record in Results must have a matching record in SampleExtraction (and vice versa)
     #   Results Table matches SampleExtraction on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
