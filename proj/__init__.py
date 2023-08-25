@@ -1,5 +1,7 @@
-import os, json, re
 from flask import Flask,current_app, g
+from flask_dropzone import Dropzone # for photo uploader
+
+import os, json, re
 from sqlalchemy import create_engine
 import psycopg2
 from psycopg2 import sql
@@ -14,7 +16,7 @@ from .scraper import scraper
 from .templater import templater # for dynamic lookup lists called into template before output to user
 from .admin import admin
 from .info import info
-from .photoviewer import photoviewer
+from .photos import photoviewer
 
 CUSTOM_CONFIG_PATH = os.path.join(os.getcwd(), 'proj', 'config')
 
@@ -30,6 +32,15 @@ assert all([item in CONFIG.keys() for item in ["EXCEL_OFFSET", "SYSTEM_FIELDS", 
 
 app = Flask(__name__, static_url_path='/static')
 app.debug = True # remove for production
+
+
+# Again, for photo uploader
+app.config.update(
+    DROPZONE_ALLOWED_FILE_TYPE='image',
+    DROPZONE_MAX_FILE_SIZE=5120,  # Set max size limit to 5GB in MB
+    DROPZONE_MAX_FILES=30,  # Set the maximum number of files to be uploaded in one request
+)
+dropzone = Dropzone(app)
 
 
 # does your application require uploaded filenames to be modified to timestamps or left as is
