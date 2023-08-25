@@ -528,10 +528,10 @@ def microplastics(all_dfs):
     
     print("# CHECKS - Each record in Results must have a matching record in SampleExtraction (and vice versa)")
     # CHECKS - Each record in Results must have a matching record in SampleExtraction (and vice versa)
-    #   Results Table matches SampleExtraction on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
+    #   Results Table matches SampleExtraction on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, LabBatch, FieldReplicate
     # (🛑 ERROR 🛑)
     # Created Coder: Robert Butler
-    # Created Date: 08/24/23
+    # Created Date: 08/25/23
     # Last Edited Date: NA
     # Last Edited Coder: NA
     # NOTE (MM/DD/YY): NA
@@ -539,8 +539,8 @@ def microplastics(all_dfs):
         "dataframe": results,
         "tablename": "tbl_mp_results",
         "badrows": mismatch(
-            instrumentinfo[instrumentinfo.instrumenttype == 'Other'], 
-            results[results.other_instrument_used == 'Yes'], 
+            , 
+            , 
             mergecols = ['lab', 'matrix']
         ), 
         "badcolumn": "InstrumentType",
@@ -550,7 +550,7 @@ def microplastics(all_dfs):
     errs = [*errs, checkData(**args)]
     
     # END CHECKS - Each record in Results must have a matching record in SampleExtraction (and vice versa)
-    #   Results Table matches SampleExtraction on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
+    #   Results Table matches SampleExtraction on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, LabBatch, FieldReplicate
     # (🛑 ERROR 🛑)
     print("# END OF CHECKS - Each record in Results must have a matching record in SampleExtraction (and vice versa)")
     
@@ -563,11 +563,11 @@ def microplastics(all_dfs):
     
     print("# CHECKS - Each record in Results must have a matching record in SampleReceiving (and vice versa)")
     # CHECKS - Each record in Results must have a matching record in SampleReceiving (and vice versa)
-    #   Results Table matches SampleReceiving on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
+    #   Results Table matches SampleReceiving on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, FieldReplicate
     # (🛑 ERROR 🛑)
 
     # END CHECKS - Each record in Results must have a matching record in SampleReceiving (and vice versa)
-    #   Results Table matches SampleReceiving on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
+    #   Results Table matches SampleReceiving on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, FieldReplicate
     # (🛑 ERROR 🛑)
     print("# END CHECKS - Each record in Results must have a matching record in SampleReceiving (and vice versa)")
     
@@ -578,13 +578,12 @@ def microplastics(all_dfs):
 
     # ------- Results <-----> LabInfo ------- #
 
+    print("# CHECKS - Results Table matches Labinfo on StationID, SampleDate, Lab, Matrix, LabBatch, FieldReplicate (two ways)")
+    # CHECKS - Results Table matches Labinfo on StationID, SampleDate, Lab, Matrix, LabBatch, FieldReplicate (two ways) (🛑 ERROR 🛑)
 
-    print("# CHECKS - Results Table matches Labinfo on StationID, SampleDate, Lab, Matrix (two ways)")
-    # CHECKS - Results Table matches Labinfo on StationID, SampleDate, Lab, Matrix (two ways) (🛑 ERROR 🛑)
 
-    # END CHECKS - Results Table matches Labinfo on StationID, SampleDate, Lab, Matrix (two ways) (🛑 ERROR 🛑)
+    # END CHECKS - Results Table matches Labinfo on StationID, SampleDate, Lab, Matrix, LabBatch, FieldReplicate (two ways) (🛑 ERROR 🛑)
     print("# END CHECKS - Results Table matches Labinfo on StationID, SampleDate, Lab, Matrix (two ways)")
-
 
     # ------- END Results <-----> LabInfo ------- #
 
