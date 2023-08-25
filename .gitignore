@@ -3,7 +3,7 @@ export/*
 logs
 .vscode
 testing/
-
+images
 proj/config/config.json
 
 # ignore pycache directories
