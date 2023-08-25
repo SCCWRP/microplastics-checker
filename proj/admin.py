@@ -67,7 +67,7 @@ def schema():
             df = metadata_summary(tbl, eng)
             
             df['lookuplist_table_name'] = df['lookuplist_table_name'].apply(
-                lambda x: f"""<a target=_blank href=/{current_app.script_root}/scraper?action=help&layer={x}>{x}</a>""" if pd.notnull(x) else ''
+                lambda x: f"""<a target=_blank href=scraper?action=help&layer={x}>{x}</a>""" if pd.notnull(x) else ''
             )
 
             # drop "table_name" column
