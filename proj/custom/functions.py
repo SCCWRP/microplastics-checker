@@ -45,6 +45,14 @@ def mismatch(df1, df2, mergecols = None, left_mergecols = None, right_mergecols 
     if df1.empty:
         return []
 
+    # if second dataframe is empty, all rows in df1 are mismatched
+    if df2.empty:
+        return df1[row_identifier].tolist() if row_identifier != 'index' else df1.index.tolist()
+
+    # Hey, you never know...
+    assert not '_present_' in df1.columns, 'For some reason, the reserved column name _present_ is in columns of df1'
+    assert not '_present_' in df2.columns, 'For some reason, the reserved column name _present_ is in columns of df2'
+
     if mergecols is not None:
         assert set(mergecols).issubset(set(df1.columns)), f"""In mismatch function - {','.join(mergecols)} is not a subset of the columns of the dataframe """
         assert set(mergecols).issubset(set(df2.columns)), f"""In mismatch function - {','.join(mergecols)} is not a subset of the columns of the dataframe """
