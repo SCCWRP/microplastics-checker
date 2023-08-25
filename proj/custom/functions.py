@@ -41,6 +41,10 @@ def mismatch(df1, df2, mergecols = None, left_mergecols = None, right_mergecols 
     # gets rows in df1 that are not in df2
     # row identifier column is tmp_row by default
 
+    # If the first dataframe is empty, then there can be no badrows
+    if df1.empty:
+        return []
+
     if mergecols is not None:
         assert set(mergecols).issubset(set(df1.columns)), f"""In mismatch function - {','.join(mergecols)} is not a subset of the columns of the dataframe """
         assert set(mergecols).issubset(set(df2.columns)), f"""In mismatch function - {','.join(mergecols)} is not a subset of the columns of the dataframe """
@@ -173,23 +177,4 @@ def check_samplenumber_sequence(df_to_check, col, samplenumbercol):
         ) \
         .tmp_row \
         .tolist()
-    return badrows
-
-# check raman, ftir, or stereoscope settings records
-def check_microscopy_instrument_settings(method, results, instrument_settings):
-    matched_columns = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction']
-    results_subset = results[results[method] == 'Yes']
-    merged_settings = results_subset.merge(
-        instrument_settings, 
-        how = 'left', 
-        left_on = matched_columns,
-        right_on = matched_columns,
-        suffixes = (None, "_instrument")
-    )
-    # because of left join, if any records of the matched_columns in the results tab
-    # don't have a record in the [raman/ftir/microscopy]settings tab, these records will be na, 
-    # therefore we look for any na values in these columns by row. then the badrows are the tmp_row 
-    # values of that row
-    merged_settings['is_bad_row'] = merged_settings[matched_columns].isna().apply(lambda x: x.any(), axis = 1)
-    badrows = merged_settings[merged_settings['is_bad_row']].tmp_row.tolist()
     return badrows
