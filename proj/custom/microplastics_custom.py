@@ -1,9 +1,11 @@
 # Dont touch this file! This is intended to be a template for implementing new custom checks
 from inspect import currentframe
 from flask import current_app, g, session
+from datetime import datetime
 from .functions import checkData, mismatch
 import pandas as pd
-import os
+import numpy as np
+import os, re
 
 def microplastics(all_dfs):
     
@@ -94,7 +96,7 @@ def microplastics(all_dfs):
         checkData(
             tablename = "tbl_mp_results",
             badrows = results[~results['photoid'].isin(uploaded_photoids)].tmp_row.tolist(), 
-            badcolumn = "photoid",
+            badcolumn = "PhotoID",
             error_type = "Logic Error",
             error_message = "PhotoID of mp_results tab must have a matching uploaded photo"
         )
@@ -122,7 +124,7 @@ def microplastics(all_dfs):
             checkData(
                 tablename = "tbl_mp_results",
                 badrows = results.tmp_row.tolist(), 
-                badcolumn = "photoid",
+                badcolumn = "PhotoID",
                 error_type = "Logic Error",
                 error_message = "All uploaded photos must have a matching PhotoID in mp_results tab"
             )
@@ -148,7 +150,7 @@ def microplastics(all_dfs):
         checkData(
             tablename = "tbl_mp_results",
             badrows = results[results['photoid'].isin(unique_photoids)].tmp_row.tolist(), 
-            badcolumn = "photoid",
+            badcolumn = "PhotoID",
             error_type = "Logic Error",
             error_message = "PhotoID of mp_results tab must have a matching uploaded photo"
         )
@@ -194,7 +196,7 @@ def microplastics(all_dfs):
                 df2 = raman,
                 mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
             ), 
-            badcolumn = "raman",
+            badcolumn = "Raman",
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the ramansettings table"
         )
@@ -210,7 +212,7 @@ def microplastics(all_dfs):
                 df1 = results[results['raman'] == 'Yes'],
                 mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
             ), 
-            badcolumn = "stationid, sampledate, lab, matrix, sampletype, sizefraction, labbatch, fieldreplicate",
+            badcolumn = "StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, LabBatch, FieldReplicate",
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the ramansettings table"
         )
@@ -246,7 +248,7 @@ def microplastics(all_dfs):
                 df2 = ftir,
                 mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
             ), 
-            badcolumn = "ftir",
+            badcolumn = "FTIR",
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the ftirsettings table"
         )
@@ -262,7 +264,7 @@ def microplastics(all_dfs):
                 df2 = results[results['ftir'] == 'Yes'],
                 mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
             ), 
-            badcolumn = "sampleid",
+            badcolumn = "SampleID",
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the results table"
         )
@@ -297,7 +299,7 @@ def microplastics(all_dfs):
                 df2 = microscopy,
                 mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
             ), 
-            badcolumn = "stereoscope",
+            badcolumn = "Stereoscope",
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the microscopysettings table"
         )
@@ -313,7 +315,7 @@ def microplastics(all_dfs):
                 df2 = results[results['stereoscope'] == 'Yes'],
                 mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
             ), 
-            badcolumn = "sampleid",
+            badcolumn = "SampleID",
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the results table"
         )
@@ -343,15 +345,17 @@ def microplastics(all_dfs):
     # (🛑 ERROR 🛑)
     # Created Coder: Robert Butler
     # Created Date: 08/24/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
+    # Last Edited Date: 08/28/23
+    # Last Edited Coder: Nick Lombardo
     # NOTE (MM/DD/YY): NA
 
     print('# Get existing instrumentinfo records for the lab(s) that are being submitted')
     # Get existing instrumentinfo records for the lab(s) that are being submitted
     # There shouldnt be more than one lab in a submission but technically there can be
+    # 08/28/23 changed tuple cast to joined list because tuple() returns something like ('value1',) when
+    #   there's only one value in labinfo.lab.astype(str), which is a syntax error in SQL
     instrumentinfo_db = pd.read_sql(
-        f"""SELECT * FROM tbl_mp_instrumentinfo WHERE lab IN {tuple(labinfo.lab.astype(str))}""", 
+        f"""SELECT * FROM tbl_mp_instrumentinfo WHERE lab IN ('{','.join(labinfo.lab.astype(str).tolist())}')""", 
         g.eng
     )
     
@@ -586,47 +590,49 @@ def microplastics(all_dfs):
     
     print("# CHECKS - Each record in Results must have a matching record in SampleReceiving (and vice versa)")
     # CHECKS - Each record in Results must have a matching record in SampleReceiving (and vice versa)
-    #   Results Table matches SampleReceiving on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, FieldReplicate
+    #   Results Table matches SampleReceiving on  StationID, SampleDate, Lab, Matrix, SampleType, FieldReplicate
     # (🛑 ERROR 🛑)
 
     # Created Coder: Robert Butler
     # Created Date: 08/25/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 08/28/23
+    # Last Edited Coder: Nick Lombardo
+    # NOTE (08/28/23): Corrected mergecols to remove Sizefraction as one of the merge cols, since 
+    #                   it's not in the SampleReceiving tab
     args.update({
         "tablename": "tbl_mp_results",
         "badrows": mismatch(
             results, 
             samplereceiving, 
-            mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'fieldreplicate']
+            mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'fieldreplicate']
         ), 
-        "badcolumn": "StationID,SampleDate,Lab,Matrix,SampleType,SizeFraction,FieldReplicate",
+        "badcolumn": "StationID,SampleDate,Lab,Matrix,SampleType,FieldReplicate",
         "error_type": "Logic Error",
-        "error_message": "Each record in Results must have a matching record in SampleReceiving. Records are matched on StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, FieldReplicate"
+        "error_message": "Each record in Results must have a matching record in SampleReceiving. Records are matched on StationID, SampleDate, Lab, Matrix, SampleType, FieldReplicate"
     })
     errs = [*errs, checkData(**args)]
 
     # Created Coder: Robert Butler
     # Created Date: 08/25/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 08/28/23
+    # Last Edited Coder: Nick Lombardo
+    # NOTE (08/28/23): Corrected mergecols to remove Sizefraction as one of the merge cols, since 
+    #                   it's not in the SampleReceiving tab
     args.update({
         "tablename": "tbl_mp_samplereceiving",
         "badrows": mismatch(
             samplereceiving, 
             results, 
-            mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'fieldreplicate']
+            mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'fieldreplicate']
         ), 
-        "badcolumn": "StationID,SampleDate,Lab,Matrix,SampleType,SizeFraction,FieldReplicate",
+        "badcolumn": "StationID,SampleDate,Lab,Matrix,SampleType,FieldReplicate",
         "error_type": "Logic Error",
-        "error_message": "Each record in SampleReceiving must have a matching record in Results. Records are matched on StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, FieldReplicate"
+        "error_message": "Each record in SampleReceiving must have a matching record in Results. Records are matched on StationID, SampleDate, Lab, Matrix, SampleType, FieldReplicate"
     })
     errs = [*errs, checkData(**args)]
 
     # END CHECKS - Each record in Results must have a matching record in SampleReceiving (and vice versa)
-    #   Results Table matches SampleReceiving on  StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, FieldReplicate
+    #   Results Table matches SampleReceiving on  StationID, SampleDate, Lab, Matrix, SampleType, FieldReplicate
     # (🛑 ERROR 🛑)
     print("# END CHECKS - Each record in Results must have a matching record in SampleReceiving (and vice versa)")
     
@@ -1215,10 +1221,6 @@ def microplastics(all_dfs):
 
 
 
-
-
-
-
     # ---------------------------------------------------------------------------------------------------- #
     # -------------- END OF Traditional Logic Checks - Checking relationships between tables ------------- #
     # ---------------------------------------------------------------------------------------------------- #
@@ -1252,15 +1254,25 @@ def microplastics(all_dfs):
 
 
     print("""# CHECK - If the matrix is sediment, then the stationid must come from lu_station (stationid column)""")
-    # CHECK - If the matrix is sediment, then the stationid must come from lu_station (stationid column) (🛑 ERROR 🛑)
-    lu_station = pd.read_sql('SELECT DISTINCT stationid FROM lu_station', g.eng)
+    # Description: If the matrix is sediment, then the stationid must come from lu_station (stationid column) (🛑 ERROR 🛑)
+    # Created Coder: Nick Lombardo
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
 
-    # errs = [
-    #     *errs,
-    #     checkData(
-            
-    #     )
-    # ]
+    lu_station = pd.read_sql('SELECT DISTINCT stationid FROM lu_station', g.eng).stationid
+    errs = [
+        *errs,
+        checkData(
+            tablename = 'tbl_mp_results',
+            # matrix column is from lu_matrix, so this case should always match
+            badrows = results[(results['matrix'] == 'Sediment') & (~results['stationid'].isin(lu_station))].tmp_row.tolist(),
+            badcolumn = "StationID",
+            error_type = "Value Error",
+            error_message = "If the matrix is sediment, then the StationID must come from lu_station"
+        )
+    ]
 
 
 
@@ -1269,15 +1281,71 @@ def microplastics(all_dfs):
 
 
     print("""# CHECK - Moisture content should be an integer from 0 to 100""")
-    # CHECK - Moisture content should be an integer from 0 to 100 (🛑 ERROR 🛑)
+    # Description: Moisture content should be an integer from 0 to 100 (🛑 ERROR 🛑)
+    # Created Coder: Nick Lombardo
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    # core checks should ensure that moisturecontent is numeric, just need to make sure fractional
+    # part is 0
+    # np.modf returns a tuple of Series that returns (fractional_part_series, integer_part_series), 
+    # so we check for fractional_part_series != 0
+    moisture_content_is_not_integer = (np.modf(results['moisturecontent'])[0] != 0)
+    moisture_content_outside_0_to_100 = (results['moisturecontent'] < 0) | (results['moisturecontent'] > 100)
+
+    errs = [
+        *errs,
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[moisture_content_is_not_integer | moisture_content_outside_0_to_100].tmp_row.tolist(),
+            badcolumn = "StationID",
+            error_type = "Value Error",
+            error_message = "Moisture content must be an integer between 0 and 100"
+        )
+    ]
+
+
     # END OF CHECK - Moisture content should be an integer from 0 to 100 (🛑 ERROR 🛑)
     print("""# END OF CHECK - Moisture content should be an integer from 0 to 100""")
 
 
     print("""# CHECK - ParticleID should be unique in the results table. """)
-    # CHECK - ParticleID should be unique in the results table. 
+    # Description: ParticleID should be unique in the results table. 
     #     Check for a duplicate particleID in their submission, and check if the same particleID name already exists in the results table in the database 
     # (🛑 ERROR 🛑)
+    # Created Coder: Nick Lombardo
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+
+    # in submission
+    errs = [
+        *errs,
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[results.duplicated(subset='particleid', keep=False)].tmp_row.tolist(),
+            badcolumn = "ParticleID",
+            error_type = "Value Error",
+            error_message = "Duplicate ParticleID in submission"
+        )
+    ]
+
+    # in database
+    particle_ids_in_db = pd.read_sql('SELECT DISTINCT particleid from tbl_mp_results', g.eng).particleid
+    errs = [
+        *errs,
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[results['particleid'].isin(particle_ids_in_db)].tmp_row.tolist(),
+            badcolumn = "ParticleID",
+            error_type = "Value Error",
+            error_message = "ParticleID already exists in database"
+        )
+    ]
 
     # END OF CHECK - ParticleID should be unique in the results table. 
     #     Check for a duplicate particleID in their submission, and check if the same particleID name already exists in the results table in the database 
@@ -1288,68 +1356,289 @@ def microplastics(all_dfs):
 
     print("""# CHECK - Length column should be from 0 to 5mm (non inclusive range)""")
     # CHECK - Length column should be from 0 to 5mm (non inclusive range) (🟡 WARNING 🟡)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    warnings.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[~results['length'].between(0, 5, inclusive='neither')].tmp_row.tolist(),
+            badcolumn = "Length",
+            error_type = "Value Error",
+            error_message = "Length should be a number between 0 and 5mm (non-inclusive)"
+        )
+    )
+
     # END OF CHECK - Length column should be from 0 to 5mm (non inclusive range) (🟡 WARNING 🟡)
     print("""# END OF CHECK - Length column should be from 0 to 5mm (non inclusive range)""")
 
 
     print("""# CHECK - Width column shuold be from 0 to 5 mm (non inclusive range)""")
     # CHECK - Width column shuold be from 0 to 5 mm (non inclusive range) (🟡 WARNING 🟡)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    warnings.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[~results['width'].between(0, 5, inclusive='neither')].tmp_row.tolist(),
+            badcolumn = "Width",
+            error_type = "Value Error",
+            error_message = "Length should be a number between 0 and 5mm (non-inclusive)"
+        )
+    )
+
     # END OF CHECK - Width column shuold be from 0 to 5 mm (non inclusive range) (🟡 WARNING 🟡)
     print("""# END OF CHECK - Width column shuold be from 0 to 5 mm (non inclusive range)""")
 
 
-    print("""# CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured'""")
-    # CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured' (🛑 ERROR 🛑)
-    # END OF CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured' (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured'""")
+    print("""# CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured' nor can it be left blank """)
+    # CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured' nor can it be left blank  (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[ 
+                (results['raman'] == 'Yes') 
+                & (
+                    (results['raman_chemicalid'].str.lower() == 'not measured') |
+                    (results['raman_chemicalid'] == '') |
+                    (results['raman_chemicalid'].isna()) 
+                )
+            ].tmp_row.tolist(),
+            badcolumn = "raman_chemicalid",
+            error_type = "Value Error",
+            error_message = "If the Raman column says 'Yes' then the raman_chemicalid cannot say 'not measured' nor can it be left blank."
+        )
+    )
+
+    # END OF CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured' nor can it be left blank (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured' nor can it be left blank""")
 
 
-    print("""# CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured'""")
-    # CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured' (🛑 ERROR 🛑)
-    # END OF CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured' (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured'""")
+    print("""# CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured' nor can it be left blank""")
+    # CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured' nor can it be left blank (🛑 ERROR 🛑)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[ 
+                (results['ftir'] == 'Yes') 
+                & (
+                    (results['ftir_chemicalid'].str.lower() == 'not measured') |
+                    (results['ftir_chemicalid'] == '') |
+                    (results['ftir_chemicalid'].isna()) 
+                )
+            ].tmp_row.tolist(),
+            badcolumn = "ftir_chemicalid",
+            error_type = "Value Error",
+            error_message = "If the FTIR column says 'Yes' then the ftir_chemicalid cannot say 'not measured' nor can it be left blank."
+        )
+    )
+    
+    # END OF CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured' nor can it be left blank (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured' nor can it be left blank""")
 
 
-    print("""# CHECK - If SampleType is Lab blank or Equipment blank, then the StationID must be '0000'""")
-    # CHECK - If SampleType is Lab blank or Equipment blank, then the StationID must be '0000' (🛑 ERROR 🛑)
-    # END OF CHECK - If SampleType is Lab blank or Equipment blank, then the StationID must be '0000' (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If SampleType is Lab blank or Equipment blank, then the StationID must be '0000'""")
+    print("""# CHECK - If SampleType is Lab blank, then the StationID must be '0000'""")
+    # CHECK - If SampleType is Lab blank, then the StationID must be '0000' (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[ (results.sampletype == 'Lab blank') & (results.stationid != '0000')].tmp_row.tolist(),
+            badcolumn = "stationid,sampletype",
+            error_type = "Value Error",
+            error_message = "If SampleType is Lab blank, then the StationID must be '0000'"
+        )
+    )
+
+    # END OF CHECK - If SampleType is Lab blank, then the StationID must be '0000' (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If SampleType is Lab blank, then the StationID must be '0000'""")
 
 
     print("""# CHECK - If SampleType is Result or Field blank, then the StationID must not be '0000'""")
     # CHECK - If SampleType is Result or Field blank, then the StationID must not be '0000' (🛑 ERROR 🛑)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[ (results.sampletype.isin(['Field blank', 'Result'])) & (results.stationid == '0000')].tmp_row.tolist(),
+            badcolumn = "stationid,sampletype",
+            error_type = "Value Error",
+            error_message = "If SampleType is Field blank or Result, then the StationID must not be '0000'"
+        )
+    )
+    
     # END OF CHECK - If SampleType is Result or Field blank, then the StationID must not be '0000' (🛑 ERROR 🛑)
     print("""# END OF CHECK - If SampleType is Result or Field blank, then the StationID must not be '0000'""")
 
 
     print("""# CHECK - TimeImagesMeasurements must be in hours - warn if over __ saying that they should not report in minutes """)
     # CHECK - TimeImagesMeasurements must be in hours - warn if over __ saying that they should not report in minutes (🟡 WARNING 🟡)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    warnings.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[results.timeimagesmeasurements > 15].tmp_row.tolist(),
+            badcolumn = "timeimagesmeasurements",
+            error_type = "Value Error",
+            error_message = "TimeImagesMeasurements must be reported in hours. This value seems unusually high, so it may have been recorded in minutes."
+        )
+    )
+    
     # END OF CHECK - TimeImagesMeasurements must be in hours - warn if over __ saying that they should not report in minutes (🟡 WARNING 🟡)
     print("""# END OF CHECK - TimeImagesMeasurements must be in hours - warn if over __ saying that they should not report in minutes """)
 
 
     print("""# CHECK - If TimeImagesMeasurements is less than 0, it must be -88 """)
     # CHECK - If TimeImagesMeasurements is less than 0, it must be -88 (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[(results.timeimagesmeasurements < 0) & (results.timeimagesmeasurements != -88) ].tmp_row.tolist(),
+            badcolumn = "timeimagesmeasurements",
+            error_type = "Value Error",
+            error_message = "TimeImagesMeasurements should not be a negative number, unless it is -88 to indicate a missing value"
+        )
+    )
+
     # END OF CHECK - If TimeImagesMeasurements is less than 0, it must be -88 (🛑 ERROR 🛑)
     print("""# END OF CHECK - If TimeImagesMeasurements is less than 0, it must be -88 """)
 
 
-    print("""# CHECK - Other_InstrumentType must a value from lu_instrumenttype, but must not be "FTIR", "Raman", or "Stereoscope" """)
-    # CHECK - Other_InstrumentType must a value from lu_instrumenttype, but must not be "FTIR", "Raman", or "Stereoscope" (🛑 ERROR 🛑)
-    # END OF CHECK - Other_InstrumentType must a value from lu_instrumenttype, but must not be "FTIR", "Raman", or "Stereoscope" (🛑 ERROR 🛑)
-    print("""# END OF CHECK - Other_InstrumentType must a value from lu_instrumenttype, but must not be "FTIR", "Raman", or "Stereoscope" """)
+    print("""# CHECK - If "Other_instrument_used" = 'Yes' then "Other_InstrumentType" must not be left blank, nor should it say 'not recorded' """)
+    # CHECK - If "Other_instrument_used" = 'Yes' then "Other_InstrumentType" must not be left blank, nor should it say 'not recorded' (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[
+                (results.other_instrument_used == 'Yes') 
+                & (
+                    (results['other_instrumenttype'].str.lower() == 'not recorded') |
+                    (results['other_instrumenttype'] == '') |
+                    (results['other_instrumenttype'].isna()) 
+                )
+            ].tmp_row.tolist(),
+            badcolumn = "other_instrumenttype",
+            error_type = "Value Error",
+            error_message = " If 'Other_instrument_used' = 'Yes' then 'Other_InstrumentType' must not be left blank, nor should it say 'not recorded'"
+        )
+    )
+
+    # END OF CHECK - If "Other_instrument_used" = 'Yes' then "Other_InstrumentType" must not be left blank, nor should it say 'not recorded' (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If "Other_instrument_used" = 'Yes' then "Other_InstrumentType" must not be left blank, nor should it say 'not recorded' """)
 
 
-    print("""# CHECK - If "Other" = 'Yes' then "Other_InstrumentType" must not be left blank """)
-    # CHECK - If "Other" = 'Yes' then "Other_InstrumentType" must not be left blank (🛑 ERROR 🛑)
-    # END OF CHECK - If "Other" = 'Yes' then "Other_InstrumentType" must not be left blank (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If "Other" = 'Yes' then "Other_InstrumentType" must not be left blank """)
+    print("""# CHECK - If "Other_instrument_used" = 'Yes' then "Other_chemicalid" must not be left blank, nor should it say 'not measured' """)
+    # CHECK - If "Other_instrument_used" = 'Yes' then "Other_chemicalid" must not be left blank, nor should it say 'not measured' (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[
+                (results.other_instrument_used == 'Yes') 
+                & (
+                    (results['other_chemicalid'].str.lower() == 'not measured') |
+                    (results['other_chemicalid'] == '') |
+                    (results['other_chemicalid'].isna()) 
+                )
+            ].tmp_row.tolist(),
+            badcolumn = "other_chemicalid",
+            error_type = "Value Error",
+            error_message = " If 'Other_instrument_used' = 'Yes' then 'Other_chemicalid' must not be left blank, nor should it say 'not measured'"
+        )
+    )
+
+    # END OF CHECK - If "Other_instrument_used" = 'Yes' then "Other_chemicalid" must not be left blank, nor should it say 'not measured' (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If "Other_instrument_used" = 'Yes' then "Other_chemicalid" must not be left blank, nor should it say 'not measured' """)
 
 
-    print("""# CHECK - If "Other" = 'No' then Other_InstrumentType must be left blank """)
-    # CHECK - If "Other" = 'No' then Other_InstrumentType must be left blank (🛑 ERROR 🛑)
-    # END OF CHECK - If "Other" = 'No' then Other_InstrumentType must be left blank (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If "Other" = 'No' then Other_InstrumentType must be left blank """)
+
+    print("""# CHECK - If "Other_instrument_used" = 'No' then Other_InstrumentType must be left blank """)
+    # CHECK - If "Other_instrument_used" = 'No' then Other_InstrumentType must be left blank (🛑 ERROR 🛑)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[
+                (results.other_instrument_used == 'No') 
+                & ~(
+                    (results['other_instrumenttype'] == '') |
+                    (results['other_instrumenttype'].isna()) 
+                )
+            ].tmp_row.tolist(),
+            badcolumn = "other_instrumenttype",
+            error_type = "Value Error",
+            error_message = " If 'Other_instrument_used' = 'No' then 'Other_InstrumentType' must be left blank"
+        )
+    )
+    
+    # END OF CHECK - If "Other_instrument_used" = 'No' then Other_InstrumentType must be left blank (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If "Other_instrument_used" = 'No' then Other_InstrumentType must be left blank """)
 
 
 
@@ -1387,6 +1676,28 @@ def microplastics(all_dfs):
 
     print("""# CHECK - If instrumenttype = 'Other' then a comment is required""")
     # CHECK - If instrumenttype = 'Other' then a comment is required (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_instrumentinfo',
+            badrows = instrumentinfo[
+                (instrumentinfo.instrumenttype == 'Other') 
+                & (
+                    (instrumentinfo['comments'] == '') |
+                    (instrumentinfo['comments'].isna()) 
+                )
+            ].tmp_row.tolist(),
+            badcolumn = "comments",
+            error_type = "Value Error",
+            error_message = " If 'instrumenttype' = 'Other' then a comment is required"
+        )
+    )
+
     # END OF CHECK - If instrumenttype = 'Other' then a comment is required (🛑 ERROR 🛑)
     print("""# END OF CHECK - If instrumenttype = 'Other' then a comment is required""")
 
@@ -1397,12 +1708,35 @@ def microplastics(all_dfs):
     #       ***Unless the instrumenttype is "Other" or "Stereoscope"
     # (🛑 ERROR 🛑)
 
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    requiredcols = ['softwarecollection', 'softwareprocessing', 'softwarematching', 'spectrallibraries', 'librarydetails', 'calibrationfrequency']
+    for col in requiredcols:
+        errs.append(
+            checkData(
+                tablename = 'tbl_mp_instrumentinfo',
+                badrows = instrumentinfo[
+                    (instrumentinfo.instrumenttype.isin(['Other','Stereoscope'])) 
+                    & (
+                        (instrumentinfo[col] == '') |
+                        (instrumentinfo[col].isna()) 
+                    )
+                ].tmp_row.tolist(),
+                badcolumn = "comments",
+                error_type = "Value Error",
+                error_message = f"The column {col} is required to be filled in, unless the instrument type is 'Other' or 'Stereoscope'"
+            )
+        )
+
+
     # END OF CHECK - Required Columns - 'SoftwareCollection', 'SoftwareProcessing', 'SoftwareMatching', 'SpectralLibraries', 'LibraryDetails', 'CalibrationFrequency' 
     #       ***Unless the instrumenttype is "Other" or "Stereoscope"
     # (🛑 ERROR 🛑)
     print("""# END OF CHECK - Required Columns - 'SoftwareCollection', 'SoftwareProcessing', 'SoftwareMatching', 'SpectralLibraries', 'LibraryDetails', 'CalibrationFrequency' """)
-
-
 
 
 
@@ -1416,13 +1750,7 @@ def microplastics(all_dfs):
 
 
 
-
-
-
     # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ #
-
-
-
 
 
 
@@ -1438,63 +1766,107 @@ def microplastics(all_dfs):
 
 
 
-    print("""# CHECK - If AirFiltration is "Yes" then AirFiltrationType must not be empty """)
-    # CHECK - If AirFiltration is "Yes" then AirFiltrationType must not be empty (🛑 ERROR 🛑)
-    # END OF CHECK - If AirFiltration is "Yes" then AirFiltrationType must not be empty (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If AirFiltration is "Yes" then AirFiltrationType must not be empty """)
+    print("""# CHECK - If [AirFiltration/ClothingPolicy/SealedEnvironment] is "Yes" then [AirFiltration/ClothingPolicy/SealedEnvironment]Type must not be empty """)
+    # CHECK - If [AirFiltration/ClothingPolicy/SealedEnvironment] is "Yes" then [AirFiltration/ClothingPolicy/SealedEnvironment]Type must not be empty (🛑 ERROR 🛑)
+    
+    print("""# ALSO CHECK - If [AirFiltration/ClothingPolicy/SealedEnvironment] is "No" then [AirFiltration/ClothingPolicy/SealedEnvironment]Type must be empty """)
+    # ALSO CHECK - If [AirFiltration/ClothingPolicy/SealedEnvironment] is "No" then [AirFiltration/ClothingPolicy/SealedEnvironment]Type must be empty (🛑 ERROR 🛑)
+    
+    cols = ['airfiltration','sealedenvironment','clothingpolicy']
+    for col in cols:
+        # If Yes, then the "type" col cant be blank
+        errs.append(
+            checkData(
+                tablename = 'tbl_mp_labinfo',
+                badrows = labinfo[
+                    (labinfo[col] == 'Yes' ) 
+                    & (
+                        (labinfo[f"{col}type"] == '') |
+                        (labinfo[f"{col}type"].isna()) 
+                    )
+                ].tmp_row.tolist(),
+                badcolumn = "comments",
+                error_type = "Value Error",
+                error_message = f"If the column {col} is 'Yes' then {col}type must not be empty"
+            )
+        )
+        
+        # If No, then the "type" col must be blank
+        errs.append(
+            checkData(
+                tablename = 'tbl_mp_labinfo',
+                badrows = labinfo[
+                    (labinfo[col] == 'No' ) 
+                    & ~(
+                        (labinfo[f"{col}type"] == '') |
+                        (labinfo[f"{col}type"].isna()) 
+                    )
+                ].tmp_row.tolist(),
+                badcolumn = "comments",
+                error_type = "Value Error",
+                error_message = f"If the column {col} is 'No' then {col}type must be empty"
+            )
+        )
 
+    # END OF CHECK - If [AirFiltration/ClothingPolicy/SealedEnvironment] is "Yes" then [AirFiltration/ClothingPolicy/SealedEnvironment]Type must not be empty (🛑 ERROR 🛑)
+    # ALSO END OF CHECK - If [AirFiltration/ClothingPolicy/SealedEnvironment] is "No" then [AirFiltration/ClothingPolicy/SealedEnvironment]Type must be empty (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If [AirFiltration/ClothingPolicy/SealedEnvironment] is "Yes" then [AirFiltration/ClothingPolicy/SealedEnvironment]Type must not be empty """)
+    print("""# ALSO END OF CHECK - If [AirFiltration/ClothingPolicy/SealedEnvironment] is "No" then [AirFiltration/ClothingPolicy/SealedEnvironment]Type must be empty """)
 
-
-    print("""# CHECK - If AirFiltration is "No" Then AirFiltrationType must be empty """)
-    # CHECK - If AirFiltration is "No" Then AirFiltrationType must be empty (🛑 ERROR 🛑)
-    # END OF CHECK - If AirFiltration is "No" Then AirFiltrationType must be empty (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If AirFiltration is "No" Then AirFiltrationType must be empty """)
-
-
-
-    print("""# CHECK - If SealedEnvironment is "Yes" then SealedEnvironmentType must not be empty """)
-    # CHECK - If SealedEnvironment is "Yes" then SealedEnvironmentType must not be empty (🛑 ERROR 🛑)
-    # END OF CHECK - If SealedEnvironment is "Yes" then SealedEnvironmentType must not be empty (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If SealedEnvironment is "Yes" then SealedEnvironmentType must not be empty """)
-
-
-
-    print("""# CHECK - If SealedEnvironment is "No" Then SealedEnvironmentType must be empty """)
-    # CHECK - If SealedEnvironment is "No" Then SealedEnvironmentType must be empty (🛑 ERROR 🛑)
-    # END OF CHECK - If SealedEnvironment is "No" Then SealedEnvironmentType must be empty (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If SealedEnvironment is "No" Then SealedEnvironmentType must be empty """)
-
-
-
-    print("""# CHECK - If ClothingPolicy is "Yes" then ClothingPolicyType must not be empty """)
-    # CHECK - If ClothingPolicy is "Yes" then ClothingPolicyType must not be empty (🛑 ERROR 🛑)
-    # END OF CHECK - If ClothingPolicy is "Yes" then ClothingPolicyType must not be empty (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If ClothingPolicy is "Yes" then ClothingPolicyType must not be empty """)
-
-
-
-    print("""# CHECK - If ClothingPolicy is "No" Then ClothingPolicyType must be empty """)
-    # CHECK - If ClothingPolicy is "No" Then ClothingPolicyType must be empty (🛑 ERROR 🛑)
-    # END OF CHECK - If ClothingPolicy is "No" Then ClothingPolicyType must be empty (🛑 ERROR 🛑)
-    print("""# END OF CHECK - If ClothingPolicy is "No" Then ClothingPolicyType must be empty """)
-
-
-
+    
     print("""# CHECK - StartDate must not be before July 2023, nor after the date of their submission (today()) """)
     # CHECK - StartDate must not be before July 2023, nor after the date of their submission (today()) (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler (using ChatGPT) (https://chat.openai.com/share/0156665e-b8de-449a-9739-f89c0ae1f8b1)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    # Define the earliest allowed StartDate and the current date
+    start_date_boundary = pd.Timestamp('2023-07-01')
+    current_date = pd.Timestamp(datetime.now().date())
+
+    # Filter rows where StartDate is before the boundary or after the current date
+    invalid_start_dates = labinfo[
+        (labinfo['startdate'] < start_date_boundary) | 
+        (labinfo['startdate'] > current_date)
+    ].tmp_row.tolist()
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_labinfo',
+            badrows=invalid_start_dates,
+            badcolumn='StartDate',
+            error_type='Date Error',
+            error_message='StartDate must not be before July 2023, nor after the date of their submission.'
+        )
+    )
+
     # END OF CHECK - StartDate must not be before July 2023, nor after the date of their submission (today()) (🛑 ERROR 🛑)
     print("""# END OF CHECK - StartDate must not be before July 2023, nor after the date of their submission (today()) """)
 
 
-
     print("""# CHECK - EndDate must not be before StartDate """)
     # CHECK - EndDate must not be before StartDate (🛑 ERROR 🛑)
+
+    # Filter rows where EndDate is before StartDate
+    invalid_end_dates = labinfo[
+        labinfo['enddate'] < labinfo['startdate']
+    ].tmp_row.tolist()
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_labinfo',
+            badrows=invalid_end_dates,
+            badcolumn='EndDate',
+            error_type='Date Error',
+            error_message='EndDate must not be before StartDate.'
+        )
+    )
+
     # END OF CHECK - EndDate must not be before StartDate (🛑 ERROR 🛑)
     print("""# END OF CHECK - EndDate must not be before StartDate """)
-
-
-
-
 
 
 
@@ -1528,77 +1900,336 @@ def microplastics(all_dfs):
     ###############################################################################################################################################
 
 
-
-
     print("""# CHECK - Range for FilterPoreSize is 0 to 500 """)
     # CHECK - Range for FilterPoreSize is 0 to 500 (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_pore_size = sampleextraction[
+        (sampleextraction['filterporesize'] < 0) | 
+        (sampleextraction['filterporesize'] > 500)
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_pore_size,
+            badcolumn='FilterPoreSize',
+            error_type='Range Warning',
+            error_message='FilterPoreSize should be in the range 0 to 500.'
+        )
+    )
+
     # END OF CHECK - Range for FilterPoreSize is 0 to 500 (🟡 WARNING 🟡)
     print("""# END OF CHECK - Range for FilterPoreSize is 0 to 500 """)
 
 
     print("""# CHECK - Range for FilterDiameter is 0 to 100 """)
     # CHECK - Range for FilterDiameter is 0 to 100 (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_diameter = sampleextraction[
+        (sampleextraction['filterdiameter'] < 0) | 
+        (sampleextraction['filterdiameter'] > 100)
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_diameter,
+            badcolumn='FilterDiameter',
+            error_type='Range Warning',
+            error_message='FilterDiameter should be in the range 0 to 100.'
+        )
+    )
+
     # END OF CHECK - Range for FilterDiameter is 0 to 100 (🟡 WARNING 🟡)
     print("""# END OF CHECK - Range for FilterDiameter is 0 to 100 """)
 
 
     print("""# CHECK - Range for KOHDigestionTemp is 0 to 100 """)
     # CHECK - Range for KOHDigestionTemp is 0 to 100 (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_temp = sampleextraction[
+        (sampleextraction['kohdigestiontemp'] < 0) | 
+        (sampleextraction['kohdigestiontemp'] > 100)
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_temp,
+            badcolumn='KOHDigestionTemp',
+            error_type='Range Warning',
+            error_message='KOHDigestionTemp should be in the range 0 to 100.'
+        )
+    )
+
     # END OF CHECK - Range for KOHDigestionTemp is 0 to 100 (🟡 WARNING 🟡)
     print("""# END OF CHECK - Range for KOHDigestionTemp is 0 to 100 """)
 
 
     print("""# CHECK - SieveMeshSize should be 212 or 500 """)
     # CHECK - SieveMeshSize should be 212 or 500 (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_mesh_size = sampleextraction[
+        ~sampleextraction['sievemeshsize'].isin([212, 500])
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_mesh_size,
+            badcolumn='SieveMeshSize',
+            error_type='Value Warning',
+            error_message='SieveMeshSize should be 212 or 500 in most cases.'
+        )
+    )
+
     # END OF CHECK - SieveMeshSize should be 212 or 500 (🟡 WARNING 🟡)
     print("""# END OF CHECK - SieveMeshSize should be 212 or 500 """)
 
 
+
     print("""# CHECK - if "time" < 0 it must be -88 """)
     # CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_time_value = sampleextraction[
+        (sampleextraction['time'] < 0) & 
+        (sampleextraction['time'] != -88)
+    ].tmp_row.tolist()
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_time_value,
+            badcolumn='time',
+            error_type='Value Error',
+            error_message='If "time" < 0, it must be -88 (indicating a missing value).'
+        )
+    )
+
     # END OF CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)
     print("""# END OF CHECK - if "time" < 0 it must be -88 """)
 
 
     print("""# CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
     # CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    time_in_minutes = sampleextraction[
+        sampleextraction['time'] > 15
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=time_in_minutes,
+            badcolumn='time',
+            error_type='Range Warning',
+            error_message='"time" should be in hours. Be sure to not report in minutes.'
+        )
+    )
+
     # END OF CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
     print("""# END OF CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
 
+    
 
     print("""# CHECK - KOHDigestionTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
     # CHECK - KOHDigestionTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
-    # END OF CHECK - KOHDigestionTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    koh_time_warning = sampleextraction[
+        sampleextraction['kohdigestiontime'] > 15
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=koh_time_warning,
+            badcolumn='kohdigestiontime',
+            error_type='Range Warning',
+            error_message='KOHDigestionTime should be in hours. Do not report in minutes.'
+        )
+    )
+
+    # END CHECK - KOHDigestionTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
     print("""# END OF CHECK - KOHDigestionTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
+    
 
 
-    print("""# CHECK - B1SeparationTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
-    # CHECK - B1SeparationTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
-    # END OF CHECK - B1SeparationTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
-    print("""# END OF CHECK - B1SeparationTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
+    
+    print("""# CHECK - b1separationtime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
+    # CHECK - b1separationtime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    koh_time_warning = sampleextraction[
+        sampleextraction['b1separationtime'] > 15
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=koh_time_warning,
+            badcolumn='b1separationtime',
+            error_type='Range Warning',
+            error_message='b1separationtime should be in hours. Do not report in minutes.'
+        )
+    )
+
+    # END CHECK - b1separationtime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+    print("""# END OF CHECK - b1separationtime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
+    
+    
+
+    print("""# CHECK - b2separationtime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
+    # CHECK - b2separationtime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    koh_time_warning = sampleextraction[
+        sampleextraction['b2separationtime'] > 15
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=koh_time_warning,
+            badcolumn='b2separationtime',
+            error_type='Range Warning',
+            error_message='b2separationtime should be in hours. Do not report in minutes.'
+        )
+    )
+
+    # END CHECK - b2separationtime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+    print("""# END OF CHECK - b2separationtime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
 
 
-    print("""# CHECK - B2SeparationTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
-    # CHECK - B2SeparationTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
-    # END OF CHECK - B2SeparationTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
-    print("""# END OF CHECK - B2SeparationTime must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes """)
+
+    print("""# CHECK - FilterPoreSize should be between 0 and 500 """)
+    # CHECK - FilterPoreSize should be between 0 and 500 (🟡 WARNING 🟡)
+    
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_pore_size_range = sampleextraction[
+        (sampleextraction['filterporesize'] < 0) | 
+        (sampleextraction['filterporesize'] > 500)
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_pore_size_range,
+            badcolumn='filterporesize',
+            error_type='Range Warning',
+            error_message='FilterPoreSize should be between 0 and 500.'
+        )
+    )
+
+    # END CHECK - FilterPoreSize should be between 0 and 500 (🟡 WARNING 🟡)
+    print("""# END OF CHECK - FilterPoreSize should be between 0 and 500 """)
+   
 
 
-    print("""# CHECK - FilterPoreSize should be between ___ and ___ """)
-    # CHECK - FilterPoreSize should be between ___ and ___ (🟡 WARNING 🟡)
-    # END OF CHECK - FilterPoreSize should be between ___ and ___ (🟡 WARNING 🟡)
-    print("""# END OF CHECK - FilterPoreSize should be between ___ and ___ """)
+    print("""# CHECK - Filterdiameter should be between 0 and 500 """)
+    # CHECK - Filterdiameter should be between 0 and 500 (🟡 WARNING 🟡)
+
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_pore_size_range = sampleextraction[
+        (sampleextraction['filterdiameter'] < 0) | 
+        (sampleextraction['filterdiameter'] > 500)
+    ].tmp_row.tolist()
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_pore_size_range,
+            badcolumn='filterdiameter',
+            error_type='Range Warning',
+            error_message='Filterdiameter should be between 0 and 500.'
+        )
+    )
+
+    # END CHECK - Filterdiameter should be between 0 and 500 (🟡 WARNING 🟡)
+    print("""# END OF CHECK - Filterdiameter should be between 0 and 500 """)
 
 
-    print("""# CHECK - FilterDiameter should be between ___ and ___ """)
-    # CHECK - FilterDiameter should be between ___ and ___ (🟡 WARNING 🟡)
-    # END OF CHECK - FilterDiameter should be between ___ and ___ (🟡 WARNING 🟡)
-    print("""# END OF CHECK - FilterDiameter should be between ___ and ___ """)
 
 
     print("""# CHECK - if filterholder is "Other" then the "comments" field cannot be left blank """)
     # CHECK - if filterholder is "Other" then the "comments" field cannot be left blank (🛑 ERROR 🛑)
-    # END OF CHECK - if filterholder is "Other" then the "comments" field cannot be left blank (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    missing_comments = sampleextraction[
+        (sampleextraction['filterholder'] == "Other") & 
+        (sampleextraction['comments'].isnull() | sampleextraction['comments'] == '')
+    ].tmp_row.tolist()
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=missing_comments,
+            badcolumn='comments',
+            error_type='Value Error',
+            error_message='If filterholder is "Other", the "comments" field cannot be left blank.'
+        )
+    )
+
     print("""# END OF CHECK - if filterholder is "Other" then the "comments" field cannot be left blank """)
 
 
@@ -1636,6 +2267,36 @@ def microplastics(all_dfs):
 
     print("""# CHECK - DateReceived should not be before July 2023, and should not be a future date""")
     # CHECK - DateReceived should not be before July 2023, and should not be a future date (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    
+    # Define the start date as July 2023
+    start_date = datetime(2023, 7, 1)
+
+    # Current date
+    current_date = datetime.today()
+
+    invalid_dates = samplereceiving[
+        (samplereceiving['datereceived'] < start_date) | 
+        (samplereceiving['datereceived'] > current_date)
+    ].tmp_row.tolist()
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_samplereceiving',
+            badrows=invalid_dates,
+            badcolumn='datereceived',
+            error_type='Date Error',
+            error_message='DateReceived should not be before July 2023 and should not be a future date.'
+        )
+    )
+
+
+
     # END OF CHECK - DateReceived should not be before July 2023, and should not be a future date (🛑 ERROR 🛑)
     print("""# END OF CHECK - DateReceived should not be before July 2023, and should not be a future date""")
 
@@ -1673,18 +2334,65 @@ def microplastics(all_dfs):
 
     print("""# CHECK - if "time" < 0 it must be -88""")
     # CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    invalid_times = microscopy[microscopy["time"] < 0 & (microscopy["time"] != -88)].tmp_row.tolist()
+    errs.append(
+        checkData(
+            tablename='tbl_mp_microscopysettings',
+            badrows=invalid_times,
+            badcolumn='time',
+            error_type='Value Error',
+            error_message='Time should not be negative unless it is -88 indicating a missing value.'
+        )
+    )
     # END OF CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)
     print("""# END OF CHECK - if "time" < 0 it must be -88""")
 
 
     print("""# CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes""")
     # CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    time_warnings = microscopy[microscopy["time"] > 15].tmp_row.tolist()
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_microscopysettings',
+            badrows=time_warnings,
+            badcolumn='time',
+            error_type='Time Format Warning',
+            error_message='"time" > 15. Ensure values are reported in hours, not minutes.'
+        )
+    )
+
     # END OF CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
     print("""# END OF CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes""")
 
 
     print("""# CHECK - Magnification should be between 1 and 1000""")
     # CHECK - Magnification should be between 1 and 1000 (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    invalid_magnifications = microscopy[(microscopy["magnification"] < 1) | (microscopy["magnification"] > 1000)].tmp_row.tolist()
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_microscopysettings',
+            badrows=invalid_magnifications,
+            badcolumn='magnification',
+            error_type='Value Warning',
+            error_message='Magnification should be between 1 and 1000.'
+        )
+    )
+
     # END OF CHECK - Magnification should be between 1 and 1000 (🟡 WARNING 🟡)
     print("""# END OF CHECK - Magnification should be between 1 and 1000""")
 
@@ -1726,57 +2434,214 @@ def microplastics(all_dfs):
     # CHECK - SpectralRange should have a format of "NUMBER-NUMBER" (Use regular expressions) 
     #       (For example, a good value in this column should look something like "185-3400")
     # (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    invalid_format = ftir[~ftir["spectralrange"].str.match(r'^\d+-\d+$')].tmp_row.tolist()
+    errs.append(
+        checkData(
+            tablename='tbl_mp_ftirsettings',
+            badrows=invalid_format,
+            badcolumn='SpectralRange',
+            error_type='Format Error',
+            error_message='SpectralRange should have a format of "NUMBER-NUMBER".'
+        )
+    )
 
     # END OF CHECK - SpectralRange should have a format of "NUMBER-NUMBER" (Use regular expressions) 
     #       (For example, a good value in this column should look something like "185-3400")
     # (🛑 ERROR 🛑)
     print("""# END OF CHECK - SpectralRange should have a format of 'NUMBER-NUMBER' """)
 
+    if ftir['spectralrange'].str.contains('-'):
+        print("""# CHECK - SpectralRange min value should not be less than 0""")
+        # CHECK - SpectralRange min value should not be less than 0 (🛑 ERROR 🛑)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
 
-    print("""# CHECK - SpectralRange min value should not be less than 0""")
-    # CHECK - SpectralRange min value should not be less than 0 (🛑 ERROR 🛑)
-    # END OF CHECK - SpectralRange min value should not be less than 0 (🛑 ERROR 🛑)
-    print("""# END OF CHECK - SpectralRange min value should not be less than 0""")
+        # Extracting min and max values
+        ftir['min_value'] = ftir['spectralrange'].str.split('-').str[0].astype(float)
+        ftir['max_value'] = ftir['spectralrange'].str.split('-').str[1].astype(float)
+
+        print("""# CHECK - SpectralRange min value should not be less than 0""")
+        invalid_min_values_below_0 = ftir[ftir["min_value"] < 0].tmp_row.tolist()
+        errs.append(
+            checkData(
+                tablename='tbl_mp_ftirsettings',
+                badrows=invalid_min_values_below_0,
+                badcolumn='SpectralRange',
+                error_type='Value Error',
+                error_message='SpectralRange min value should not be less than 0.'
+            )
+        )
+
+        # END OF CHECK - SpectralRange min value should not be less than 0 (🛑 ERROR 🛑)
+        print("""# END OF CHECK - SpectralRange min value should not be less than 0""")
 
 
-    print("""# CHECK - SpectralRange min value should not be less than 400""")
-    # CHECK - SpectralRange min value should not be less than 400 (🟡 WARNING 🟡)
-    # END OF CHECK - SpectralRange min value should not be less than 400 (🟡 WARNING 🟡)
-    print("""# END OF CHECK - SpectralRange min value should not be less than 400""")
+        print("""# CHECK - SpectralRange min value should not be less than 400""")
+        # CHECK - SpectralRange min value should not be less than 400 (🟡 WARNING 🟡)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        warnings_below_400 = ftir[ftir["min_value"] < 400].tmp_row.tolist()
+        warnings.append(
+            checkData(
+                tablename='tbl_mp_ftirsettings',
+                badrows=warnings_below_400,
+                badcolumn='SpectralRange',
+                error_type='Value Warning',
+                error_message='SpectralRange min value should not be less than 400.'
+            )
+        )
+
+        # END OF CHECK - SpectralRange min value should not be less than 400 (🟡 WARNING 🟡)
+        print("""# END OF CHECK - SpectralRange min value should not be less than 400""")
 
 
-    print("""# CHECK - SpectralRange max value should not be over 4000""")
-    # CHECK - SpectralRange max value should not be over 4000 (🟡 WARNING 🟡)
-    # END OF CHECK - SpectralRange max value should not be over 4000 (🟡 WARNING 🟡)
-    print("""# END OF CHECK - SpectralRange max value should not be over 4000""")
+        print("""# CHECK - SpectralRange max value should not be over 4000""")
+        # CHECK - SpectralRange max value should not be over 4000 (🟡 WARNING 🟡)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        warnings_above_4000 = ftir[ftir["max_value"] > 4000].tmp_row.tolist()
+        warnings.append(
+            checkData(
+                tablename='tbl_mp_ftirsettings',
+                badrows=warnings_above_4000,
+                badcolumn='SpectralRange',
+                error_type='Value Warning',
+                error_message='SpectralRange max value should not be over 4000.'
+            )
+        )
+
+        # END OF CHECK - SpectralRange max value should not be over 4000 (🟡 WARNING 🟡)
+        print("""# END OF CHECK - SpectralRange max value should not be over 4000""")
 
 
-    print("""# CHECK - SpectralRange min value cannot be more than the max value""")
-    # CHECK - SpectralRange min value cannot be more than the max value (🛑 ERROR 🛑)
-    # END OF CHECK - SpectralRange min value cannot be more than the max value (🛑 ERROR 🛑)
-    print("""# END OF CHECK - SpectralRange min value cannot be more than the max value""")
+        print("""# CHECK - SpectralRange min value cannot be more than the max value""")
+        # CHECK - SpectralRange min value cannot be more than the max value (🛑 ERROR 🛑)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        invalid_min_values = ftir[ftir["min_value"] > ftir["max_value"]].tmp_row.tolist()
+        errs.append(
+            checkData(
+                tablename='tbl_mp_ftirsettings',
+                badrows=invalid_min_values,
+                badcolumn='SpectralRange',
+                error_type='Value Error',
+                error_message='SpectralRange min value cannot be more than the max value.'
+            )
+        )
+
+        # END OF CHECK - SpectralRange min value cannot be more than the max value (🛑 ERROR 🛑)
+        print("""# END OF CHECK - SpectralRange min value cannot be more than the max value""")
+
+        ftir.drop(['min_value', 'max_value'], inplace = True, axis = 'columns')
 
 
     print("""# CHECK - SpectralResolution should be from ___ to ___""")
     # CHECK - SpectralResolution should be from ___ to ___ (🟡 WARNING 🟡)
+    # Fill in the range for SpectralResolution
+    # Set as 0 to 10 for now
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_ftirsettings',
+            badrows=ftir[~ftir.numberscans.between(0, 10)].tmp_row.tolist(), 
+            badcolumn='SpectralResolution',
+            error_type='Value Warning',
+            error_message='SpectralResolution should be from ___ to ___.'  # Update the range here
+        )
+    )
     # END OF CHECK - SpectralResolution should be from ___ to ___ (🟡 WARNING 🟡)
     print("""# END OF CHECK - SpectralResolution should be from ___ to ___""")
 
 
     print("""# CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)""")
     # CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_times = ftir[(ftir["time"] < 0) & (ftir["time"] != -88)].tmp_row.tolist()
+    errs.append(
+        checkData(
+            tablename='tbl_mp_ftirsettings',
+            badrows=invalid_times,
+            badcolumn='time',
+            error_type='Value Error',
+            error_message='If "Time" is less than 0, it must be -88.'
+        )
+    )
+
     # END OF CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)
     print("""# END OF CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)""")
 
 
     print("""# CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes""")
     # CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    
+    time_warnings = ftir[ftir["time"] > 15].tmp_row.tolist()
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_ftirsettings',
+            badrows=time_warnings,
+            badcolumn='time',
+            error_type='Value Warning',
+            error_message='"Time" must be measured in hours - it seems to be over 15, indicating it might be reported in minutes.'
+        )
+    )
+
     # END OF CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
     print("""# END OF CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes""")
 
 
     print("""# CHECK - NumberScans should be between ___ and ___""")
     # CHECK - NumberScans should be between ___ and ___ (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    # Fill in the range for NumberScans
+    # Set as 0 to 10 for now
+
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_ftirsettings',
+            badrows=ftir[~ftir.numberscans.between(0, 10)].tmp_row.tolist(), 
+            badcolumn='NumberScans',
+            error_type='Value Warning',
+            error_message='NumberScans should be between ___ and ___.'  # Update the range here
+        )
+    )
+
     # END OF CHECK - NumberScans should be between ___ and ___ (🟡 WARNING 🟡)
     print("""# END OF CHECK - NumberScans should be between ___ and ___""")
 
@@ -1817,12 +2682,44 @@ def microplastics(all_dfs):
 
     print("""# CHECK - Range for LaserWaveLength is 500 to 800""")
     # CHECK - Range for LaserWaveLength is 500 to 800 (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    laser_wave_length_warnings = raman[(raman["laserwavelength"] < 500) | (raman["laserwavelength"] > 800)].tmp_row.tolist()
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=laser_wave_length_warnings,
+            badcolumn='laserwavelength',
+            error_type='Value Warning',
+            error_message='Range for LaserWaveLength should be 500 to 800.'
+        )
+    )
+
     # END OF CHECK - Range for LaserWaveLength is 500 to 800 (🟡 WARNING 🟡)
     print("""# END OF CHECK - Range for LaserWaveLength is 500 to 800""")
 
 
     print("""# CHECK - Range for LaserGrating is 200 to 4000""")
     # CHECK - Range for LaserGrating is 200 to 4000 (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    laser_grating_warnings = raman[(raman["lasergrating"] < 200) | (raman["lasergrating"] > 4000)].tmp_row.tolist()
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=laser_grating_warnings,
+            badcolumn='lasergrating',
+            error_type='Value Warning',
+            error_message='Range for LaserGrating should be 200 to 4000.'
+        )
+    )
     # END OF CHECK - Range for LaserGrating is 200 to 4000 (🟡 WARNING 🟡)
     print("""# END OF CHECK - Range for LaserGrating is 200 to 4000""")
 
@@ -1831,39 +2728,135 @@ def microplastics(all_dfs):
     # CHECK - SpectralRange should have a format of "NUMBER-NUMBER" (Use regular expressions) 
     #       (For example, a good value in this column should look something like "185-3400") 
     # (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    pattern = re.compile(r'^\d+-\d+$')
+    invalid_spectral_range = raman[~raman["spectralrange"].astype(str).str.match(pattern)].tmp_row.tolist()
+    errs.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=invalid_spectral_range,
+            badcolumn='spectralrange',
+            error_type='Value Error',
+            error_message='SpectralRange should have a format of "NUMBER-NUMBER", e.g., "185-3400".'
+        )
+    )
 
     # END OF CHECK - SpectralRange should have a format of "NUMBER-NUMBER" (Use regular expressions) 
     #       (For example, a good value in this column should look something like "185-3400")
     # (🛑 ERROR 🛑)
     print("""# END OF CHECK - SpectralRange should have a format of 'NUMBER-NUMBER' """)
 
+    if len(invalid_spectral_range) > 0:
+        # Split the spectral range into min and max columns for easier processing
+        raman['min_spectral_range'] = raman['spectralrange'].str.split('-').str[0].astype(int)
+        raman['max_spectral_range'] = raman['spectralrange'].str.split('-').str[1].astype(int)
 
-    print("""# CHECK - SpectralRange min value should not be less than 0""")
-    # CHECK - SpectralRange min value should not be less than 0 (🛑 ERROR 🛑)
-    # END OF CHECK - SpectralRange min value should not be less than 0 (🛑 ERROR 🛑)
-    print("""# END OF CHECK - SpectralRange min value should not be less than 0""")
+        print("""# CHECK - SpectralRange min value should not be less than 0""")
+        # CHECK - SpectralRange min value should not be less than 0 (🛑 ERROR 🛑)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        min_val_below_zero = raman[raman['min_spectral_range'] < 0].tmp_row.tolist()
+        errs.append(
+            checkData(
+                tablename='tbl_mp_ramansettings',
+                badrows=min_val_below_zero,
+                badcolumn='spectralrange',
+                error_type='Value Error',
+                error_message='SpectralRange min value should not be less than 0.'
+            )
+        )
+        # END OF CHECK - SpectralRange min value should not be less than 0 (🛑 ERROR 🛑)
+        print("""# END OF CHECK - SpectralRange min value should not be less than 0""")
 
+        print("""# CHECK - SpectralRange min value should not be less than 50""")
+        # CHECK - SpectralRange min value should not be less than 50 (🟡 WARNING 🟡)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        min_val_below_50 = raman[raman['min_spectral_range'] < 50].tmp_row.tolist()
+        warnings.append(
+            checkData(
+                tablename='tbl_mp_ramansettings',
+                badrows=min_val_below_50,
+                badcolumn='spectralrange',
+                error_type='Value Warning',
+                error_message='SpectralRange min value should not be less than 50.'
+            )
+        )
+        # END OF CHECK - SpectralRange min value should not be less than 50 (🟡 WARNING 🟡)
+        print("""# END OF CHECK - SpectralRange min value should not be less than 50""")
 
-    print("""# CHECK - SpectralRange min value should not be less than 50""")
-    # CHECK - SpectralRange min value should not be less than 50 (🟡 WARNING 🟡)
-    # END OF CHECK - SpectralRange min value should not be less than 50 (🟡 WARNING 🟡)
-    print("""# END OF CHECK - SpectralRange min value should not be less than 50""")
+        print("""# CHECK - SpectralRange max value should not be over 4000""")
+        # CHECK - SpectralRange max value should not be over 4000 (🟡 WARNING 🟡)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        max_val_over_4000 = raman[raman['max_spectral_range'] > 4000].tmp_row.tolist()
+        warnings.append(
+            checkData(
+                tablename='tbl_mp_ramansettings',
+                badrows=max_val_over_4000,
+                badcolumn='spectralrange',
+                error_type='Value Warning',
+                error_message='SpectralRange max value should not be over 4000.'
+            )
+        )
+        # END OF CHECK - SpectralRange max value should not be over 4000 (🟡 WARNING 🟡)
+        print("""# END OF CHECK - SpectralRange max value should not be over 4000""")
 
+        print("""# CHECK - SpectralRange min value cannot be more than the max value""")
+        # CHECK - SpectralRange min value cannot be more than the max value (🛑 ERROR 🛑)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        min_more_than_max = raman[raman['min_spectral_range'] > raman['max_spectral_range']].tmp_row.tolist()
+        errs.append(
+            checkData(
+                tablename='tbl_mp_ramansettings',
+                badrows=min_more_than_max,
+                badcolumn='spectralrange',
+                error_type='Value Error',
+                error_message='SpectralRange min value cannot be more than the max value.'
+            )
+        )
+        # END OF CHECK - SpectralRange min value cannot be more than the max value (🛑 ERROR 🛑)
+        print("""# END OF CHECK - SpectralRange min value cannot be more than the max value""")
 
-    print("""# CHECK - SpectralRange max value should not be over 4000""")
-    # CHECK - SpectralRange max value should not be over 4000 (🟡 WARNING 🟡)
-    # END OF CHECK - SpectralRange max value should not be over 4000 (🟡 WARNING 🟡)
-    print("""# END OF CHECK - SpectralRange max value should not be over 4000""")
+        # After all checks, drop the temporary columns created
+        raman.drop(columns=['min_spectral_range', 'max_spectral_range'], inplace=True, errors='ignore')
 
-
-    print("""# CHECK - SpectralRange min value cannot be more than the max value""")
-    # CHECK - SpectralRange min value cannot be more than the max value (🛑 ERROR 🛑)
-    # END OF CHECK - SpectralRange min value cannot be more than the max value (🛑 ERROR 🛑)
-    print("""# END OF CHECK - SpectralRange min value cannot be more than the max value""")
 
 
     print("""# CHECK - SpectralResolution should be from ___ to ___""")
     # CHECK - SpectralResolution should be from ___ to ___ (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=raman[~raman.spectralresolution.between(0, 10)].tmp_row.tolist(),
+            badcolumn='spectralrange',
+            error_type='Value Error',
+            error_message='SpectralResolution should be in a range of ___ to ___'
+        )
+    )
     # END OF CHECK - SpectralResolution should be from ___ to ___ (🟡 WARNING 🟡)
     print("""# END OF CHECK - SpectralResolution should be from ___ to ___""")
 
@@ -1872,46 +2865,154 @@ def microplastics(all_dfs):
     # CHECK - Aperture should have a format of "NUMBER-NUMBER" (Use regular expressions) 
     #       (For example, a good value in this column should look something like "100-150")
     # (🛑 ERROR 🛑)
-
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    invalid_aperture_format = raman[~raman['Aperture'].astype(str).str.match(r'^\d+-\d+$')].tmp_row.tolist()
+    errs.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=invalid_aperture_format,
+            badcolumn='Aperture',
+            error_type='Value Error',
+            error_message='Aperture should have a format of "NUMBER-NUMBER".'
+        )
+    )
     # END OF CHECK - Aperture should have a format of "NUMBER-NUMBER" (Use regular expressions) 
     #       (For example, a good value in this column should look something like "100-150")
     # (🛑 ERROR 🛑)
     print("""# END OF CHECK - Aperture should have a format of "NUMBER-NUMBER" (Use regular expressions) """)
 
+    # Check if the above check has passed
+    if not invalid_aperture_format:
+        # Split the Aperture into min and max columns for easier processing
+        raman['min_aperture'] = raman['Aperture'].str.split('-').str[0].astype(int)
+        raman['max_aperture'] = raman['Aperture'].str.split('-').str[1].astype(int)
 
+        print("""# CHECK - Aperture minimum value cannot be more than the max value""")
+        # CHECK - Aperture minimum value cannot be more than the max value (🛑 ERROR 🛑)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        aperture_min_more_than_max = raman[raman['min_aperture'] > raman['max_aperture']].tmp_row.tolist()
+        errs.append(
+            checkData(
+                tablename='tbl_mp_ramansettings',
+                badrows=aperture_min_more_than_max,
+                badcolumn='Aperture',
+                error_type='Value Error',
+                error_message='Aperture minimum value cannot be more than the max value.'
+            )
+        )
+        # END OF CHECK - Aperture minimum value cannot be more than the max value (🛑 ERROR 🛑)
+        print("""# END OF CHECK - Aperture minimum value cannot be more than the max value""")
 
-    print("""# CHECK - Aperture minimum value cannot be more than the max value""")
-    # CHECK - Aperture minimum value cannot be more than the max value (🛑 ERROR 🛑)
-    # END OF CHECK - Aperture minimum value cannot be more than the max value (🛑 ERROR 🛑)
-    print("""# END OF CHECK - Aperture minimum value cannot be more than the max value""")
+        print("""# CHECK - Aperture minimum value cannot be less than 0""")
+        # CHECK - Aperture minimum value cannot be less than 0 (🛑 ERROR 🛑)
+        # Created Coder: Robert Butler (using ChatGPT)
+        # Created Date: 08/28/23
+        # Last Edited Date: NA
+        # Last Edited Coder: NA
+        # NOTE (MM/DD/YY): NA
+        aperture_min_below_zero = raman[raman['min_aperture'] < 0].tmp_row.tolist()
+        errs.append(
+            checkData(
+                tablename='tbl_mp_ramansettings',
+                badrows=aperture_min_below_zero,
+                badcolumn='Aperture',
+                error_type='Value Error',
+                error_message='Aperture minimum value cannot be less than 0.'
+            )
+        )
+        # END OF CHECK - Aperture minimum value cannot be less than 0 (🛑 ERROR 🛑)
+        print("""# END OF CHECK - Aperture minimum value cannot be less than 0""")
 
+        # Drop the temporary columns created
+        raman.drop(columns=['min_aperture', 'max_aperture'], inplace=True, errors='ignore')
 
-    print("""# CHECK - Aperture minimum value cannot be less than 0""")
-    # CHECK - Aperture minimum value cannot be less than 0 (🛑 ERROR 🛑)
-    # END OF CHECK - Aperture minimum value cannot be less than 0 (🛑 ERROR 🛑)
-    print("""# END OF CHECK - Aperture minimum value cannot be less than 0""")
 
 
     print("""# CHECK - Objective should be an integer 1 to 100""")
     # CHECK - Objective should be an integer 1 to 100 (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    invalid_objective = raman[(raman['objective'] < 1) | (raman['objective'] > 100) | (~raman['objective'].astype(str).str.isnumeric())].tmp_row.tolist()
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=invalid_objective,
+            badcolumn='Objective',
+            error_type='Value Warning',
+            error_message='Objective should be an integer 1 to 100.'
+        )
+    )
     # END OF CHECK - Objective should be an integer 1 to 100 (🟡 WARNING 🟡)
     print("""# END OF CHECK - Objective should be an integer 1 to 100""")
 
-
     print("""# CHECK - MatchThreshold should be a number from 0 to 100 since it is a percentage""")
     # CHECK - MatchThreshold should be a number from 0 to 100 since it is a percentage (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    invalid_match_threshold = raman[(raman['matchthreshold'] < 0) | (raman['matchthreshold'] > 100)].tmp_row.tolist()
+    errs.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=invalid_match_threshold,
+            badcolumn='MatchThreshold',
+            error_type='Value Error',
+            error_message='MatchThreshold should be a number from 0 to 100 since it is a percentage.'
+        )
+    )
     # END OF CHECK - MatchThreshold should be a number from 0 to 100 since it is a percentage (🛑 ERROR 🛑)
     print("""# END OF CHECK - MatchThreshold should be a number from 0 to 100 since it is a percentage""")
 
-
     print("""# CHECK - if "time" < 0 it must be -88""")
     # CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    invalid_time_negative = raman[(raman['time'] < 0) & (raman['time'] != -88)].tmp_row.tolist()
+    errs.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=invalid_time_negative,
+            badcolumn='time',
+            error_type='Value Error',
+            error_message='If "time" < 0, it must be -88.'
+        )
+    )
     # END OF CHECK - if "time" < 0 it must be -88 (🛑 ERROR 🛑)
     print("""# END OF CHECK - if "time" < 0 it must be -88""")
 
-
     print("""# CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes""")
     # CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
+    # Created Coder: Robert Butler (using ChatGPT)
+    # Created Date: 08/28/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    time_warning_rows = raman[raman['time'] > 15].tmp_row.tolist()
+    warnings.append(
+        checkData(
+            tablename='tbl_mp_ramansettings',
+            badrows=time_warning_rows,
+            badcolumn='time',
+            error_type='Value Warning',
+            error_message='"time" must be measured in hours. Values over 15 suggest it might be reported in minutes.'
+        )
+    )
     # END OF CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes (🟡 WARNING 🟡)
     print("""# END OF CHECK - "time" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes""")
 
@@ -1922,10 +3023,9 @@ def microplastics(all_dfs):
 
     ##################################################################################################################################################
     # ---------------------------------------------------------------------------------------------------------------------------------------------- #
-    # ------------------------------------------------------- END OF RamanSettings Tab Checks ------------------------------------------------------- #
+    # ------------------------------------------------------- END OF RamanSettings Tab Checks ------------------------------------------------------ #
     # ---------------------------------------------------------------------------------------------------------------------------------------------- #
     ##################################################################################################################################################
-
 
 
 
