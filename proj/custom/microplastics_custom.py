@@ -139,11 +139,11 @@ def microplastics(all_dfs):
     # Description - Cannot upload a photo with a filename that matches one that was previously used in a previous submission (🛑 ERROR 🛑)
     # Created Coder: Nick Lombardo
     # Created Date: 08/22/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 8/29/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (08/29/2023): Put .photoid at the end of query that gets the previously used photoids
 
-    unique_photoids = pd.read_sql('SELECT DISTINCT photoid from tbl_mp_results', g.eng)
+    unique_photoids = pd.read_sql('SELECT DISTINCT photoid from tbl_mp_results', g.eng).photoid
 
     errs = [
         *errs,
@@ -152,7 +152,7 @@ def microplastics(all_dfs):
             badrows = results[results['photoid'].isin(unique_photoids)].tmp_row.tolist(), 
             badcolumn = "PhotoID",
             error_type = "Logic Error",
-            error_message = "PhotoID of mp_results tab must have a matching uploaded photo"
+            error_message = "This PhotoID was used in a previous submission, please use a different file name."
         )
     ]
 
@@ -1343,7 +1343,7 @@ def microplastics(all_dfs):
             badrows = results[results['particleid'].isin(particle_ids_in_db)].tmp_row.tolist(),
             badcolumn = "ParticleID",
             error_type = "Value Error",
-            error_message = "ParticleID already exists in database"
+            error_message = "This ParticleID already exists in database"
         )
     ]
 
