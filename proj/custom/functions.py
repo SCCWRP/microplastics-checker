@@ -56,9 +56,9 @@ def mismatch(df1, df2, mergecols = None, left_mergecols = None, right_mergecols 
     if mergecols is not None:
         assert set(mergecols).issubset(set(df1.columns)), f"""In mismatch function - {','.join(mergecols)} is not a subset of the columns of the dataframe """
         assert set(mergecols).issubset(set(df2.columns)), f"""In mismatch function - {','.join(mergecols)} is not a subset of the columns of the dataframe """
-        tmp = df1 \
+        tmp = df1.astype(str) \
             .merge(
-                df2.assign(_present_='yes'),
+                df2.astype(str).assign(_present_='yes'),
                 on = mergecols, 
                 how = 'left',
                 suffixes = ('','_df2')
@@ -68,9 +68,9 @@ def mismatch(df1, df2, mergecols = None, left_mergecols = None, right_mergecols 
         assert set(left_mergecols).issubset(set(df1.columns)), f"""In mismatch function - {','.join(left_mergecols)} is not a subset of the columns of the dataframe of the first argument"""
         assert set(right_mergecols).issubset(set(df2.columns)), f"""In mismatch function - {','.join(right_mergecols)} is not a subset of the columns of the dataframe of the second argument"""
         
-        tmp = df1 \
+        tmp = df1.astype(str) \
             .merge(
-                df2.assign(_present_='yes'),
+                df2.astype(str).assign(_present_='yes'),
                 left_on = left_mergecols, 
                 right_on = right_mergecols, 
                 how = 'left',
@@ -87,6 +87,11 @@ def mismatch(df1, df2, mergecols = None, left_mergecols = None, right_mergecols 
     else:
         badrows = []
 
+    assert \
+        all(isinstance(item, int) or (isinstance(item, str) and item.isdigit()) for item in badrows), \
+        "In mismatch function - Not all items in 'badrows' are integers or strings representing integers"
+    
+    badrows = [int(x) for x in badrows]
     return badrows
 
 
