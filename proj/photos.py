@@ -30,7 +30,7 @@ def index():
     # prevent sql injection
     particleid = str(particleid).replace("'","").replace('"','').replace(';','')
     
-    sql = "SELECT particleid, morphology, color, photoid, lab, sampletype, stationid, submissionid FROM tbl_mp_results WHERE particleid ~ %s;"
+    sql = "SELECT particleid, morphology, color, photoid, lab, sampletype, stationid, submissionid FROM tbl_mp_results WHERE particleid ~ %s AND photoid IS NOT NULL;"
     data = pd.read_sql(sql, g.eng, params=(particleid,))
 
 
@@ -54,6 +54,7 @@ def index():
         # This is the case where we got an empty dataframe
         # This means no particles were found in the search results
         flash(f"No search result found for particle: {particleid}")
+        flash(f"It may also possibly be the case that data does exist for the particle {particleid}, but there is no photo for it, because spectroscopy was not performed on it.")
         return render_template('particle-search.jinja2', AUTHORIZED = session.get('AUTHORIZED_FOR_ADMIN_FUNCTIONS'))
 
 

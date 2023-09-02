@@ -245,13 +245,17 @@ def load():
         image_src_dir = session.get('submission_photos_dir')
         image_dir = os.path.join(os.getcwd(), 'images')
         
-        photos = pd.read_sql(f"SELECT submissionid, photoid FROM tbl_mp_results WHERE submissionid = {session.get('submissionid')}", g.eng)
+        photos = pd.read_sql(
+            f"SELECT submissionid, photoid FROM tbl_mp_results WHERE submissionid = {session.get('submissionid')} AND photoid IS NOT NULL", 
+            g.eng
+        )
 
         photos.apply(
             lambda row:
             move_submission_photos(row, image_src_dir, image_dir),
             axis = 1
         )
+        
     except Exception as e:
         raise Exception(f"Failed moving photos to final images dir for submissionid {session.get('submissionid')}: {e}")
 

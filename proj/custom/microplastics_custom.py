@@ -85,9 +85,9 @@ def microplastics(all_dfs):
     # Description: PhotoID of tbl_mp_results tab must have a matching uploaded photo (🛑 ERROR 🛑)
     # Created Coder: Nick Lombardo
     # Created Date: 08/21/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 9/1/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (09/01/2023): Photos no longer required if the PolymerID says 'Not measured'
 
     uploaded_photoids = os.listdir(session['submission_photos_dir'])
 
@@ -95,15 +95,49 @@ def microplastics(all_dfs):
         *errs,
         checkData(
             tablename = "tbl_mp_results",
-            badrows = results[~results['photoid'].isin(uploaded_photoids)].tmp_row.tolist(), 
+            badrows = results[
+                # Get records where the photoid was not left blank...
+                (results.photoid.fillna('').astype(str).str.replace("\s*","", regex = True) != '')
+                &
+                # AND the photoID was not found in the uploaded photos directory
+                (~results['photoid'].isin(uploaded_photoids))
+            ].tmp_row.tolist(), 
             badcolumn = "PhotoID",
             error_type = "Logic Error",
-            error_message = "PhotoID of mp_results tab must have a matching uploaded photo"
+            error_message = "PhotoID of mp_results tab must have a matching uploaded photo. If there is not photo for the particle, you may leave the cell empty."
         )
     ]
 
     # END OF CHECK - PhotoID of tbl_mp_results tab must have a matching uploaded photo (🛑 ERROR 🛑)
     print("# END OF CHECK - PhotoID of tbl_mp_results tab must have a matching uploaded photo")
+
+
+    print("# CHECK - PhotoID required only for records where the polymerID is not 'Not measured' ")
+    # Description: PhotoID required only for records where the polymerID is not 'Not measured' (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler
+    # Created Date: 9/1/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs = [
+        *errs,
+        checkData(
+            tablename = "tbl_mp_results",
+            badrows = results[
+                # Get records where PolymerID is NOT 'Not measured'
+                (results.polymerid.astype(str).str.lower() != 'not measured') 
+                # But the photoid was left blank...
+                & (results.photoid.fillna('').astype(str).str.replace("\s*","", regex = True) == '')
+            ].tmp_row.tolist(), 
+            badcolumn = "PhotoID",
+            error_type = "Logic Error",
+            error_message = "Photos are required for records where there is a PolymerID (even if the polymer was not able to be identified)"
+        )
+    ]
+
+    # END OF CHECK - PhotoID required only for records where the polymerID is not 'Not measured' (🛑 ERROR 🛑)
+    print("# END OF CHECK - PhotoID required only for records where the polymerID is not 'Not measured'")
 
 
     print("# CHECK - Photo uploaded must match their submission (PhotoID column in the tbl_mp_results tab)")
@@ -182,10 +216,12 @@ def microplastics(all_dfs):
     # (🛑 ERROR 🛑)
     # Created Coder: Nick Lombardo
     # Created Date: 08/21/23
-    # Last Edited Date: 08/28/23
-    # Last Edited Coder: Nick Lombardo
+    # Last Edited Date: 08/30/23
+    # Last Edited Coder: Robert Butler
     # NOTE (08/24/23): Updated to use the generic mismatch function instead
     # NOTE (08/28/23): Removed if block since mismatch function handles empty dataframes already
+    # NOTE (08/30/23): Updated the value of the "badcolumn" arg to be the columns that the dataframs match on
+
     
     errs = [
         *errs,
@@ -196,7 +232,7 @@ def microplastics(all_dfs):
                 df2 = raman,
                 mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
             ), 
-            badcolumn = "Raman",
+            badcolumn = "StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction, LabBatch, FieldReplicate",
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the ramansettings table"
         )
@@ -232,13 +268,14 @@ def microplastics(all_dfs):
     # (🛑 ERROR 🛑)
     # Created Coder: Nick Lombardo
     # Created Date: 08/21/23
-    # Last Edited Date: 08/28/2023
-    # Last Edited Coder: Nick Lombardo
+    # Last Edited Date: 08/30/2023
+    # Last Edited Coder: Robert Butler
     # NOTE (8/25/2023): Added LabBatch and FieldRep to the columns that the dataframes match on - Robert
     # NOTE (8/25/2023): remove the other direction of the logic check from the if block, since we will always want to check that - Robert
     # NOTE (08/28/23): Removed if block since mismatch function handles empty dataframes already
+    # NOTE (08/30/23): put the columns to match on in a variable called matchcols (Robert)
 
-
+    matchcols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
     errs = [
         *errs,
         checkData(
@@ -246,9 +283,9 @@ def microplastics(all_dfs):
             badrows = mismatch(
                 df1 = results[results['ftir'] == 'Yes'],
                 df2 = ftir,
-                mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                mergecols = matchcols
             ), 
-            badcolumn = "FTIR",
+            badcolumn = ','.join(matchcols),
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the ftirsettings table"
         )
@@ -262,9 +299,9 @@ def microplastics(all_dfs):
             badrows = mismatch(
                 df1 = ftir,
                 df2 = results[results['ftir'] == 'Yes'],
-                mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                mergecols = matchcols
             ), 
-            badcolumn = "SampleID",
+            badcolumn = ','.join(matchcols),
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the results table"
         )
@@ -285,11 +322,13 @@ def microplastics(all_dfs):
     # (🛑 ERROR 🛑)
     # Created Coder: Nick Lombardo
     # Created Date: 08/21/23
-    # Last Edited Date: 08/28/2023
-    # Last Edited Coder: Nick Lombardo
-    # NOTE (MM/DD/YY): Added LabBatch and FieldRep to the columns that the dataframes match on
+    # Last Edited Date: 08/30/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (08/25/23): Added LabBatch and FieldRep to the columns that the dataframes match on
     # NOTE (08/28/23): Removed if block since mismatch function handles empty dataframes already
-    
+    # NOTE (08/30/23): put the columns to match on in a variable called matchcols (Robert)
+
+    matchcols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
     errs = [
         *errs,
         checkData(
@@ -297,9 +336,9 @@ def microplastics(all_dfs):
             badrows = mismatch(
                 df1 = results[results['stereoscope'] == 'Yes'],
                 df2 = microscopy,
-                mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                mergecols = matchcols
             ), 
-            badcolumn = "Stereoscope",
+            badcolumn = ",".join(matchcols),
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the microscopysettings table"
         )
@@ -313,9 +352,9 @@ def microplastics(all_dfs):
             badrows = mismatch(
                 df1 = microscopy,
                 df2 = results[results['stereoscope'] == 'Yes'],
-                mergecols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
+                mergecols = matchcols
             ), 
-            badcolumn = "SampleID",
+            badcolumn = ",".join(matchcols),
             error_type = "Logic Error",
             error_message = "There must be a corresponding record in the results table"
         )
@@ -1257,9 +1296,9 @@ def microplastics(all_dfs):
     # Description: If the matrix is sediment, then the stationid must come from lu_station (stationid column) (🛑 ERROR 🛑)
     # Created Coder: Nick Lombardo
     # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 09/01/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (MM/DD/YY): Added a link to the stations lookup list
 
     lu_station = pd.read_sql('SELECT DISTINCT stationid FROM lu_station', g.eng).stationid
     errs = [
@@ -1270,7 +1309,7 @@ def microplastics(all_dfs):
             badrows = results[(results['matrix'] == 'Sediment') & (~results['stationid'].isin(lu_station))].tmp_row.tolist(),
             badcolumn = "StationID",
             error_type = "Value Error",
-            error_message = "If the matrix is sediment, then the StationID must come from lu_station"
+            error_message = "If the matrix is sediment, then the StationID must come from the <a target=_blank href=scraper?action=help&layer=lu_station>Bight 2023 Stations Lookup List</a>"
         )
     ]
 
@@ -1280,35 +1319,56 @@ def microplastics(all_dfs):
     print("""# END OF CHECK - If the matrix is sediment, then the stationid must come from lu_station (stationid column)""")
 
 
-    print("""# CHECK - Moisture content should be an integer from 0 to 100""")
-    # Description: Moisture content should be an integer from 0 to 100 (🛑 ERROR 🛑)
+    print("""# CHECK - Moisture content should be an number from 0 to 100""")
+    # Description: Moisture content should be an number from 0 to 100 (🛑 ERROR 🛑)
     # Created Coder: Nick Lombardo
     # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 8/31/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (08/31/2023): Moisturecontent doesnt need to be an integer necessarily - confirmed by Leah on 8/31/2023
 
-    # core checks should ensure that moisturecontent is numeric, just need to make sure fractional
-    # part is 0
-    # np.modf returns a tuple of Series that returns (fractional_part_series, integer_part_series), 
-    # so we check for fractional_part_series != 0
-    moisture_content_is_not_integer = (np.modf(results['moisturecontent'])[0] != 0)
     moisture_content_outside_0_to_100 = (results['moisturecontent'] < 0) | (results['moisturecontent'] > 100)
 
     errs = [
         *errs,
         checkData(
             tablename = 'tbl_mp_results',
-            badrows = results[moisture_content_is_not_integer | moisture_content_outside_0_to_100].tmp_row.tolist(),
-            badcolumn = "StationID",
+            badrows = results[moisture_content_outside_0_to_100].tmp_row.tolist(),
+            badcolumn = "MoistureContent",
             error_type = "Value Error",
-            error_message = "Moisture content must be an integer between 0 and 100"
+            error_message = "Moisture content must be an number between 0 and 100"
         )
     ]
 
 
-    # END OF CHECK - Moisture content should be an integer from 0 to 100 (🛑 ERROR 🛑)
-    print("""# END OF CHECK - Moisture content should be an integer from 0 to 100""")
+    # END OF CHECK - Moisture content should be an number from 0 to 100 (🛑 ERROR 🛑)
+    print("""# END OF CHECK - Moisture content should be an number from 0 to 100""")
+ 
+ 
+    print("""# CHECK - MoistureContent required if matrix is 'Sediment'""")
+    # Description: MoistureContent required if matrix is 'Sediment' (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler
+    # Created Date: 8/31/2023
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs = [
+        *errs,
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[(results.matrix == 'Sediment') & (results.moisturecontent.isnull())].tmp_row.tolist(),
+            badcolumn = "MoistureContent",
+            error_type = "Value Error",
+            error_message = "MoistureContent required if matrix is 'Sediment'"
+        )
+    ]
+
+
+    # END OF CHECK - MoistureContent required if matrix is 'Sediment' (🛑 ERROR 🛑)
+    print("""# END OF CHECK - MoistureContent required if matrix is 'Sediment'""")
+
+
 
 
     print("""# CHECK - ParticleID should be unique in the results table. """)
@@ -1354,11 +1414,58 @@ def microplastics(all_dfs):
 
 
 
-    print("""# CHECK - Length column should be from 0 to 5mm (non inclusive range)""")
-    # CHECK - Length column should be from 0 to 5mm (non inclusive range) (🟡 WARNING 🟡)
+    print("""# CHECK - Length column should be from 0 to 5000um (non inclusive range)""")
+    # CHECK - Length column should be from 0 to 5000um (non inclusive range) (🛑 ERROR 🛑)
     
     # Created Coder: Robert Butler
     # Created Date: 08/28/23
+    # Last Edited Date: 08/31/23
+    # Last Edited Coder: Robert Butler
+    # NOTE (08/31/23): made this an error rather than warning - Robert
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[~results['length_um'].between(0, 5000, inclusive='neither')].tmp_row.tolist(),
+            badcolumn = "Length_um",
+            error_type = "Value Error",
+            error_message = "Length should be a number between 0 and 5000um (non-inclusive)"
+        )
+    )
+
+    # END OF CHECK - Length column should be from 0 to 5000um (non inclusive range) (🛑 ERROR 🛑)
+    print("""# END OF CHECK - Length column should be from 0 to 5000um (non inclusive range)""")
+
+
+    print("""# CHECK - Width column shuold be from 0 to 5000 um (non inclusive range)""")
+    # CHECK - Width column shuold be from 0 to 5000 um (non inclusive range) (🛑 ERROR 🛑)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 08/28/23
+    # Last Edited Date: 08/31/23
+    # Last Edited Coder: Robert Butler
+    # NOTE (08/31/23): Changed error_message to Width instead of Length - Nick
+    # NOTE (08/31/23): made this an error rather than warning - Robert
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[~results['width_um'].between(0, 5000, inclusive='neither')].tmp_row.tolist(),
+            badcolumn = "Width_um",
+            error_type = "Value Error",
+            error_message = "Width should be a number between 0 and 5000um (non-inclusive)"
+        )
+    )
+
+    # END OF CHECK - Width column shuold be from 0 to 5000 um (non inclusive range) (🛑 ERROR 🛑)
+    print("""# END OF CHECK - Width column shuold be from 0 to 5000 um (non inclusive range)""")
+  
+  
+    print("""# CHECK - Length column should not be from 0 to 125um (non inclusive range)""")
+    # CHECK - Length column should not be from 0 to 125um (non inclusive range) (🟡 WARNING 🟡)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 08/31/23
     # Last Edited Date: NA
     # Last Edited Coder: NA
     # NOTE (MM/DD/YY): NA
@@ -1366,22 +1473,22 @@ def microplastics(all_dfs):
     warnings.append(
         checkData(
             tablename = 'tbl_mp_results',
-            badrows = results[~results['length'].between(0, 5, inclusive='neither')].tmp_row.tolist(),
-            badcolumn = "Length",
+            badrows = results[results['length_um'].between(0, 125, inclusive='neither')].tmp_row.tolist(),
+            badcolumn = "Length_um",
             error_type = "Value Error",
-            error_message = "Length should be a number between 0 and 5mm (non-inclusive)"
+            error_message = "Length should be 125um or above"
         )
     )
 
-    # END OF CHECK - Length column should be from 0 to 5mm (non inclusive range) (🟡 WARNING 🟡)
-    print("""# END OF CHECK - Length column should be from 0 to 5mm (non inclusive range)""")
+    # END OF CHECK - Length column should not be from 0 to 125um (non inclusive range) (🟡 WARNING 🟡)
+    print("""# END OF CHECK - Length column should not be from 0 to 125um (non inclusive range)""")
 
 
-    print("""# CHECK - Width column shuold be from 0 to 5 mm (non inclusive range)""")
-    # CHECK - Width column shuold be from 0 to 5 mm (non inclusive range) (🟡 WARNING 🟡)
+    print("""# CHECK - Width column should not be from 0 to 125 um (non inclusive range)""")
+    # CHECK - Width column should not be from 0 to 125 um (non inclusive range) (🟡 WARNING 🟡)
     
     # Created Coder: Robert Butler
-    # Created Date: 08/28/23
+    # Created Date: 08/31/23
     # Last Edited Date: NA
     # Last Edited Coder: NA
     # NOTE (MM/DD/YY): NA
@@ -1389,15 +1496,15 @@ def microplastics(all_dfs):
     warnings.append(
         checkData(
             tablename = 'tbl_mp_results',
-            badrows = results[~results['width'].between(0, 5, inclusive='neither')].tmp_row.tolist(),
-            badcolumn = "Width",
+            badrows = results[results['width_um'].between(0, 125, inclusive='neither')].tmp_row.tolist(),
+            badcolumn = "Width_um",
             error_type = "Value Error",
-            error_message = "Length should be a number between 0 and 5mm (non-inclusive)"
+            error_message = "Width should be 125um or above"
         )
     )
 
-    # END OF CHECK - Width column shuold be from 0 to 5 mm (non inclusive range) (🟡 WARNING 🟡)
-    print("""# END OF CHECK - Width column shuold be from 0 to 5 mm (non inclusive range)""")
+    # END OF CHECK - Width column should not be from 0 to 125 um (non inclusive range) (🟡 WARNING 🟡)
+    print("""# END OF CHECK - Width column should not be from 0 to 125 um (non inclusive range)""")
 
 
     print("""# CHECK - If Raman = 'Yes' Then raman_chemicalid cannot be 'not measured' nor can it be left blank """)
@@ -1416,8 +1523,7 @@ def microplastics(all_dfs):
                 (results['raman'] == 'Yes') 
                 & (
                     (results['raman_chemicalid'].fillna('').astype(str).str.lower() == 'not measured') |
-                    (results['raman_chemicalid'] == '') |
-                    (results['raman_chemicalid'].isna()) 
+                    (results['raman_chemicalid'].fillna('').astype(str).str.replace("\s*","", regex = True) == '') 
                 )
             ].tmp_row.tolist(),
             badcolumn = "raman_chemicalid",
@@ -1446,8 +1552,7 @@ def microplastics(all_dfs):
                 (results['ftir'] == 'Yes') 
                 & (
                     (results['ftir_chemicalid'].fillna('').astype(str).str.lower() == 'not measured') |
-                    (results['ftir_chemicalid'] == '') |
-                    (results['ftir_chemicalid'].isna()) 
+                    (results['ftir_chemicalid'].fillna('').astype(str).str.replace("\s*","", regex = True) == '') 
                 )
             ].tmp_row.tolist(),
             badcolumn = "ftir_chemicalid",
@@ -1458,6 +1563,30 @@ def microplastics(all_dfs):
     
     # END OF CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured' nor can it be left blank (🛑 ERROR 🛑)
     print("""# END OF CHECK - If FTIR = 'Yes' (in results table) then ftir_chemicalid cannot be 'not measured' nor can it be left blank""")
+
+
+    print("""# CHECK - If the 'Raman' or 'FTIR' column says 'Yes' then the PolymerID cannot be 'Not measured'""")
+    # CHECK - If the 'Raman' or 'FTIR' column says 'Yes' then the PolymerID cannot be 'Not measured' (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler
+    # Created Date: 08/31/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[ ((results.raman == 'Yes') | (results.ftir == 'Yes')) & (results.polymerid == 'Not measured') ].tmp_row.tolist(),
+            badcolumn = "polymerid",
+            error_type = "Value Error",
+            error_message = "If the 'Raman' or 'FTIR' column says 'Yes' then the PolymerID cannot be 'Not measured'"
+        )
+    )
+
+    # END OF CHECK - If the 'Raman' or 'FTIR' column says 'Yes' then the PolymerID cannot be 'Not measured' (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If the 'Raman' or 'FTIR' column says 'Yes' then the PolymerID cannot be 'Not measured'""")
+
 
 
     print("""# CHECK - If SampleType is Lab blank, then the StationID must be '0000'""")
@@ -1569,7 +1698,8 @@ def microplastics(all_dfs):
                 & (
                     (results['other_instrumenttype'].fillna('').astype(str).str.lower() == 'not recorded') |
                     (results['other_instrumenttype'] == '') |
-                    (results['other_instrumenttype'].isna()) 
+                    (results['other_instrumenttype'].isna()) |
+                    (results['other_instrumenttype'].fillna('').astype(str).str.replace("\s*","", regex = True) == '') 
                 )
             ].tmp_row.tolist(),
             badcolumn = "other_instrumenttype",
@@ -1599,7 +1729,8 @@ def microplastics(all_dfs):
                 & (
                     (results['other_chemicalid'].fillna('').astype(str).str.lower() == 'not measured') |
                     (results['other_chemicalid'] == '') |
-                    (results['other_chemicalid'].isna()) 
+                    (results['other_chemicalid'].isna()) |
+                    (results['other_chemicalid'].fillna('').astype(str).str.replace("\s*","", regex = True) == '') 
                 )
             ].tmp_row.tolist(),
             badcolumn = "other_chemicalid",
@@ -1687,10 +1818,7 @@ def microplastics(all_dfs):
             tablename = 'tbl_mp_instrumentinfo',
             badrows = instrumentinfo[
                 (instrumentinfo.instrumenttype == 'Other') 
-                & (
-                    (instrumentinfo['comments'] == '') |
-                    (instrumentinfo['comments'].isna()) 
-                )
+                & (instrumentinfo['comments'].fillna('').astype(str).str.replace("\s*","", regex = True) == '')
             ].tmp_row.tolist(),
             badcolumn = "comments",
             error_type = "Value Error",
@@ -1710,9 +1838,11 @@ def microplastics(all_dfs):
 
     # Created Coder: Robert Butler
     # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 08/31/23
+    # Last Edited Coder: Nick Lombardo
+    # NOTE (08/31/23): Fixed badcolumn reference to col in requiredcols, fixed badrows definition
+    #                   from (instrumentinfo.instrumenttype.isin(['Other','Stereoscope'])) to
+    #                   (~instrumentinfo.instrumenttype.isin(['Other','Stereoscope'])) 
 
     requiredcols = ['softwarecollection', 'softwareprocessing', 'softwarematching', 'spectrallibraries', 'librarydetails', 'calibrationfrequency']
     for col in requiredcols:
@@ -1720,13 +1850,13 @@ def microplastics(all_dfs):
             checkData(
                 tablename = 'tbl_mp_instrumentinfo',
                 badrows = instrumentinfo[
-                    (instrumentinfo.instrumenttype.isin(['Other','Stereoscope'])) 
+                    (~instrumentinfo.instrumenttype.isin(['Other','Stereoscope'])) 
                     & (
                         (instrumentinfo[col] == '') |
                         (instrumentinfo[col].isna()) 
                     )
                 ].tmp_row.tolist(),
-                badcolumn = "comments",
+                badcolumn = col,
                 error_type = "Value Error",
                 error_message = f"The column {col} is required to be filled in, unless the instrument type is 'Other' or 'Stereoscope'"
             )
@@ -1785,7 +1915,7 @@ def microplastics(all_dfs):
                         (labinfo[f"{col}type"].isna()) 
                     )
                 ].tmp_row.tolist(),
-                badcolumn = "comments",
+                badcolumn = f"{col}type",
                 error_type = "Value Error",
                 error_message = f"If the column {col} is 'Yes' then {col}type must not be empty"
             )
@@ -1802,7 +1932,7 @@ def microplastics(all_dfs):
                         (labinfo[f"{col}type"].isna()) 
                     )
                 ].tmp_row.tolist(),
-                badcolumn = "comments",
+                badcolumn = f"{col}type",
                 error_type = "Value Error",
                 error_message = f"If the column {col} is 'No' then {col}type must be empty"
             )
@@ -1859,7 +1989,7 @@ def microplastics(all_dfs):
         checkData(
             tablename='tbl_mp_labinfo',
             badrows=invalid_end_dates,
-            badcolumn='EndDate',
+            badcolumn='StartDate,EndDate',
             error_type='Date Error',
             error_message='EndDate must not be before StartDate.'
         )
@@ -1900,44 +2030,17 @@ def microplastics(all_dfs):
     ###############################################################################################################################################
 
 
-    print("""# CHECK - Range for FilterPoreSize is 0 to 500 """)
-    # CHECK - Range for FilterPoreSize is 0 to 500 (🟡 WARNING 🟡)
-    # Created Coder: Robert Butler (using ChatGPT)
-    # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
-
-    invalid_pore_size = sampleextraction[
-        (sampleextraction['filterporesize_um'] < 0) | 
-        (sampleextraction['filterporesize_um'] > 500)
-    ].tmp_row.tolist()
-
-    warnings.append(
-        checkData(
-            tablename='tbl_mp_sampleextraction',
-            badrows=invalid_pore_size,
-            badcolumn='FilterPoreSize_um',
-            error_type='Range Warning',
-            error_message='FilterPoreSize should be in the range 0 to 500.'
-        )
-    )
-
-    # END OF CHECK - Range for FilterPoreSize is 0 to 500 (🟡 WARNING 🟡)
-    print("""# END OF CHECK - Range for FilterPoreSize is 0 to 500 """)
-
-
     print("""# CHECK - Range for FilterDiameter is 0 to 100 """)
     # CHECK - Range for FilterDiameter is 0 to 100 (🟡 WARNING 🟡)
     # Created Coder: Robert Butler (using ChatGPT)
     # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 9/1/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (9/1/2023): Made acceptable range non inclusive
 
     invalid_diameter = sampleextraction[
-        (sampleextraction['filterdiameter_mm'] < 0) | 
-        (sampleextraction['filterdiameter_mm'] > 100)
+        (sampleextraction['filterdiameter_mm'] <= 0) | 
+        (sampleextraction['filterdiameter_mm'] >= 100)
     ].tmp_row.tolist()
 
     warnings.append(
@@ -1946,12 +2049,38 @@ def microplastics(all_dfs):
             badrows=invalid_diameter,
             badcolumn='filterdiameter_mm',
             error_type='Range Warning',
-            error_message='filterdiameter_mm should be in the range 0 to 100.'
+            error_message='filterdiameter_mm should be between 0 and 100.'
         )
     )
 
     # END OF CHECK - Range for FilterDiameter is 0 to 100 (🟡 WARNING 🟡)
     print("""# END OF CHECK - Range for FilterDiameter is 0 to 100 """)
+
+
+    print("""# CHECK - Range for FilterDiameter must not be negative """)
+    # CHECK - Range for FilterDiameter must not be negative (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler 
+    # Created Date: 09/1/23
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    invalid_diameter = sampleextraction[
+        (sampleextraction['filterdiameter_mm'] < 0) 
+    ].tmp_row.tolist()
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_diameter,
+            badcolumn='filterdiameter_mm',
+            error_type='Range Warning',
+            error_message='filterdiameter_mm cannot be negative.'
+        )
+    )
+
+    # END OF CHECK - Range for FilterDiameter must not be negative (🛑 ERROR 🛑)
+    print("""# END OF CHECK - Range for FilterDiameter must not be negative """)
 
 
     print("""# CHECK - Range for KOHDigestionTemp_c is 0 to 100 """)
@@ -1963,8 +2092,8 @@ def microplastics(all_dfs):
     # NOTE (MM/DD/YY): NA
 
     invalid_temp = sampleextraction[
-        (sampleextraction['kohdigestiontemp_c'] < 0) | 
-        (sampleextraction['kohdigestiontemp_c'] > 100)
+        (sampleextraction['kohdigestiontemp_c'] <= 0) | 
+        (sampleextraction['kohdigestiontemp_c'] >= 100)
     ].tmp_row.tolist()
 
     warnings.append(
@@ -1973,7 +2102,7 @@ def microplastics(all_dfs):
             badrows=invalid_temp,
             badcolumn='KOHDigestionTemp_c',
             error_type='Range Warning',
-            error_message='KOHDigestionTemp_c should be in the range 0 to 100.'
+            error_message='KOHDigestionTemp_c should be between 0 and 100.'
         )
     )
 
@@ -1981,16 +2110,18 @@ def microplastics(all_dfs):
     print("""# END OF CHECK - Range for KOHDigestionTemp_c is 0 to 100 """)
 
 
-    print("""# CHECK - SieveMeshSize_um should be 212 or 500 """)
-    # CHECK - SieveMeshSize_um should be 212 or 500 (🟡 WARNING 🟡)
+    print("""# CHECK - SieveMeshSize_um should be 125, 355, 500, or 5000 """)
+    # CHECK - SieveMeshSize_um should be 125, 355, 500, 5000 (🟡 WARNING 🟡)
     # Created Coder: Robert Butler (using ChatGPT)
     # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 08/31/2023
+    # Last Edited Coder: Robert Butler
+    # NOTE (8/31/2023): updated sievemeshsizes according to Leah's requirements
+    #                   this bight cycle analyzes different sizefractions than the original intercal study
+    #                   sievemeshsizes are now 125, 355, 500, 5000
 
     invalid_mesh_size = sampleextraction[
-        ~sampleextraction['sievemeshsize_um'].isin([212, 500])
+        ~sampleextraction['sievemeshsize_um'].isin([125, 355, 500, 5000])
     ].tmp_row.tolist()
 
     warnings.append(
@@ -1999,12 +2130,37 @@ def microplastics(all_dfs):
             badrows=invalid_mesh_size,
             badcolumn='SieveMeshSize_um',
             error_type='Value Warning',
-            error_message='SieveMeshSize_um should be 212 or 500 in most cases.'
+            error_message='SieveMeshSize_um should be 125, 355, 500, or 5000 in most cases.'
         )
     )
 
-    # END OF CHECK - SieveMeshSize_um should be 212 or 500 (🟡 WARNING 🟡)
-    print("""# END OF CHECK - SieveMeshSize_um should be 212 or 500 """)
+    # END OF CHECK - SieveMeshSize_um should be 125, 355, 500, 5000 (🟡 WARNING 🟡)
+    print("""# END OF CHECK - SieveMeshSize_um should be 125, 355, 500, or 5000 """)
+
+
+
+    print("""# CHECK - SieveMeshSize_um must  be greater than zero """)
+    # CHECK - SieveMeshSize_um must  be greater than zero (🛑 ERROR 🛑)
+    # Created Coder: Robert Butler 
+    # Created Date: 9/1/2023
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (9/1/2023): NA
+
+    invalid_mesh_size = sampleextraction[ sampleextraction['sievemeshsize_um'] <= 0 ].tmp_row.tolist()
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=invalid_mesh_size,
+            badcolumn='SieveMeshSize_um',
+            error_type='Value Warning',
+            error_message='SieveMeshSize_um must be greater than zero'
+        )
+    )
+
+    # END OF CHECK - SieveMeshSize_um must  be greater than zero (🛑 ERROR 🛑)
+    print("""# END OF CHECK - SieveMeshSize_um must  be greater than zero 5000 """)
 
 
 
@@ -2147,8 +2303,8 @@ def microplastics(all_dfs):
 
 
 
-    print("""# CHECK - FilterPoreSize should be between 0 and 500 """)
-    # CHECK - FilterPoreSize should be between 0 and 500 (🟡 WARNING 🟡)
+    print("""# CHECK - FilterPoreSize should be 1, 10, 20, or 50 """)
+    # CHECK - FilterPoreSize should be 1, 10, 20, or 50 (🟡 WARNING 🟡)
     
     # Created Coder: Robert Butler (using ChatGPT)
     # Created Date: 08/28/23
@@ -2156,10 +2312,7 @@ def microplastics(all_dfs):
     # Last Edited Coder: NA
     # NOTE (MM/DD/YY): NA
 
-    invalid_pore_size_range = sampleextraction[
-        (sampleextraction['filterporesize_um'] < 0) | 
-        (sampleextraction['filterporesize_um'] > 500)
-    ].tmp_row.tolist()
+    invalid_pore_size_range = sampleextraction[~sampleextraction['filterporesize_um'].isin([1,10,20,50])].tmp_row.tolist()
 
     warnings.append(
         checkData(
@@ -2167,12 +2320,12 @@ def microplastics(all_dfs):
             badrows=invalid_pore_size_range,
             badcolumn='filterporesize_um',
             error_type='Range Warning',
-            error_message='FilterPoreSize should be between 0 and 500.'
+            error_message='FilterPoreSize should be 1, 10, 20, or 50.'
         )
     )
 
-    # END CHECK - FilterPoreSize should be between 0 and 500 (🟡 WARNING 🟡)
-    print("""# END OF CHECK - FilterPoreSize should be between 0 and 500 """)
+    # END CHECK - FilterPoreSize should be 1, 10, 20, or 50 (🟡 WARNING 🟡)
+    print("""# END OF CHECK - FilterPoreSize should be 1, 10, 20, or 50 """)
    
 
 
@@ -2189,7 +2342,7 @@ def microplastics(all_dfs):
 
     missing_comments = sampleextraction[
         (sampleextraction['filterholder'] == "Other") & 
-        (sampleextraction['comments'].isnull() | sampleextraction['comments'] == '')
+        (sampleextraction['comments'].fillna('').astype(str).str.replace("\s*","", regex = True) == '')
     ].tmp_row.tolist()
 
     errs.append(
@@ -2525,28 +2678,6 @@ def microplastics(all_dfs):
         ftir.drop(['min_value', 'max_value'], inplace = True, axis = 'columns')
 
 
-    print("""# CHECK - SpectralResolution should be from ___ to ___""")
-    # CHECK - SpectralResolution should be from ___ to ___ (🟡 WARNING 🟡)
-    # Fill in the range for SpectralResolution
-    # Set as 0 to 10 for now
-    # Created Coder: Robert Butler (using ChatGPT)
-    # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
-
-    warnings.append(
-        checkData(
-            tablename='tbl_mp_ftirsettings',
-            badrows=ftir[~ftir.numberscans.between(0, 10)].tmp_row.tolist(), 
-            badcolumn='SpectralResolution',
-            error_type='Value Warning',
-            error_message='SpectralResolution should be from ___ to ___.'  # Update the range here
-        )
-    )
-    # END OF CHECK - SpectralResolution should be from ___ to ___ (🟡 WARNING 🟡)
-    print("""# END OF CHECK - SpectralResolution should be from ___ to ___""")
-
 
     print("""# CHECK - if "timehours" < 0 it must be -88 (🛑 ERROR 🛑)""")
     # CHECK - if "timehours" < 0 it must be -88 (🛑 ERROR 🛑)
@@ -2594,29 +2725,26 @@ def microplastics(all_dfs):
     print("""# END OF CHECK - "timehours" must be measured in hours - issue warning if it is over 15, telling them they should not report in minutes""")
 
 
-    print("""# CHECK - NumberScans should be between ___ and ___""")
-    # CHECK - NumberScans should be between ___ and ___ (🟡 WARNING 🟡)
+    print("""# CHECK - NumberScans should be greater than zero (🛑 ERROR 🛑)""")
+    # CHECK - NumberScans should be greater than zero (🛑 ERROR 🛑)
     # Created Coder: Robert Butler (using ChatGPT)
     # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 08/28/23
+    # Last Edited Coder: Robert Butler
+    # NOTE (08/28/23): NumberScans should just be greater than zero
 
-    # Fill in the range for NumberScans
-    # Set as 0 to 10 for now
-
-    warnings.append(
+    errs.append(
         checkData(
             tablename='tbl_mp_ftirsettings',
-            badrows=ftir[~ftir.numberscans.between(0, 10)].tmp_row.tolist(), 
+            badrows=ftir[ftir.numberscans <= 0].tmp_row.tolist(), 
             badcolumn='NumberScans',
             error_type='Value Warning',
-            error_message='NumberScans should be between ___ and ___.'  # Update the range here
+            error_message='NumberScans should be greater than zero.'  
         )
     )
 
-    # END OF CHECK - NumberScans should be between ___ and ___ (🟡 WARNING 🟡)
-    print("""# END OF CHECK - NumberScans should be between ___ and ___""")
+    # END OF CHECK - NumberScans should be greater than zero (🛑 ERROR 🛑)
+    print("""# END OF CHECK - NumberScans should be greater than zero (🛑 ERROR 🛑)""")
 
 
 
@@ -2724,7 +2852,7 @@ def microplastics(all_dfs):
     # (🛑 ERROR 🛑)
     print("""# END OF CHECK - SpectralRange should have a format of 'NUMBER-NUMBER' """)
 
-    if len(invalid_spectral_range) > 0:
+    if len(invalid_spectral_range) == 0:
         # Split the spectral range into min and max columns for easier processing
         raman['min_spectral_range'] = raman['spectralrange_cm'].fillna('').astype(str).str.split('-').str[0].astype(int)
         raman['max_spectral_range'] = raman['spectralrange_cm'].fillna('').astype(str).str.split('-').str[1].astype(int)
@@ -2812,26 +2940,6 @@ def microplastics(all_dfs):
         # After all checks, drop the temporary columns created
         raman.drop(columns=['min_spectral_range', 'max_spectral_range'], inplace=True, errors='ignore')
 
-
-
-    print("""# CHECK - SpectralResolution should be from ___ to ___""")
-    # CHECK - SpectralResolution should be from ___ to ___ (🟡 WARNING 🟡)
-    # Created Coder: Robert Butler (using ChatGPT)
-    # Created Date: 08/28/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
-    warnings.append(
-        checkData(
-            tablename='tbl_mp_ramansettings',
-            badrows=raman[~raman.spectralresolution.between(0, 10)].tmp_row.tolist(),
-            badcolumn='spectralrange_cm',
-            error_type='Value Error',
-            error_message='SpectralResolution should be in a range of ___ to ___'
-        )
-    )
-    # END OF CHECK - SpectralResolution should be from ___ to ___ (🟡 WARNING 🟡)
-    print("""# END OF CHECK - SpectralResolution should be from ___ to ___""")
 
 
     print("""# CHECK - Aperture should have a format of "NUMBER-NUMBER" (Use regular expressions) """)
