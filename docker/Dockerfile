@@ -37,6 +37,7 @@ RUN pip3 install geopy
 RUN pip3 install shareplum
 RUN pip3 install BeautifulSoup4
 RUN pip3 install Flask-Dropzone
+RUN pip3 install Flask-WTF
 
 
 

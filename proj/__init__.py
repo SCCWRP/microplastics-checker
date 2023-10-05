@@ -1,5 +1,6 @@
-from flask import Flask,current_app, g
+from flask import Flask,current_app, g, jsonify, render_template
 from flask_dropzone import Dropzone # for photo uploader
+from flask_wtf.csrf import CSRFProtect, CSRFError
 
 import os, json, re
 from sqlalchemy import create_engine
@@ -50,6 +51,10 @@ app.config['MAIL_SERVER'] = CONFIG.get('MAIL_SERVER')
 
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB limit
 app.secret_key = os.environ.get("FLASK_APP_SECRET_KEY")
+
+# CSRF protection
+# csrf = CSRFProtect(app)
+
 
 # add all the items from the config file into the app configuration
 # we should probably access all custom config items in this way
@@ -171,3 +176,8 @@ app.register_blueprint(report_bp)
 app.register_blueprint(admin)
 app.register_blueprint(info)
 app.register_blueprint(photoviewer)
+
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    return render_template('csrf_error.jinja2', reason=e.description), 400

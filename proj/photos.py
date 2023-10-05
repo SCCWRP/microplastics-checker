@@ -2,7 +2,7 @@ import os, re
 import pandas as pd
 from bs4 import BeautifulSoup
 from io import BytesIO
-from flask import Blueprint, g, current_app, render_template, redirect, url_for, session, request, jsonify, send_file, flash, abort
+from flask import Blueprint, g, current_app, render_template, redirect, url_for, session, request, jsonify, send_file, flash, abort,send_from_directory
 import psycopg2
 from psycopg2 import sql
 
@@ -96,29 +96,66 @@ def photoupload():
     else:
         ACTIVE_SESSION = True
 
+    # This is the case that it is a GET request
+    directory_path = session.get('submission_photos_dir')
+    
+
     if request.method == 'POST':
         files = request.files.getlist('file')
         if not files or len(files) == 0:
             flash('No file selected!', 'error')
             return redirect(request.url)
 
-        save_path = session.get('submission_photos_dir')
-
         for file in files:
             if file and allowed_imagefile(file.filename):
                 filename = secure_filename(file.filename)
                 if filename.rsplit('.', 1)[1].lower() == 'zip':
                     with ZipFile(file) as zipf:
-                        zipf.extractall(path=save_path)
+                        zipf.extractall(path=directory_path)
                 else:
-                    file.save(os.path.join(save_path, filename))
+                    file.save(os.path.join(directory_path, filename))
             else:
                 # flash(f"Invalid file type: {file.filename}", 'error')
                 return "Please upload png or jpg", 415
         flash('Files uploaded successfully!', 'success')
         return redirect(url_for('photoviewer.photoupload'))
-
-    return render_template('photoupload.jinja2',ACTIVE_SESSION=ACTIVE_SESSION)
-
     
+    uploaded_files = []
+
+    for filename in os.listdir(directory_path):
+        # Check if file is an image (add more formats if needed)
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            file_path = os.path.join(directory_path, filename)
+            # Obtain file size and construct its web-accessible path
+            uploaded_files.append({
+                'name': filename,
+                'size': os.path.getsize(file_path),
+                'path': os.path.join(directory_path, filename),  # modify as per your actual file serving route
+                'url' : f'/get_image/{filename}',
+                'extension': filename.rsplit('.',1)[-1] if ('.' in filename) else ''
+
+            })
+
+    return render_template('photoupload.jinja2',ACTIVE_SESSION=ACTIVE_SESSION, uploaded_files=uploaded_files)
+
+
+@photoviewer.route('/get_image/<filename>')
+def serve_image(filename):
+    directory_path = str(session.get('submission_photos_dir'))
+    return send_from_directory(directory_path, filename) \
+        if os.path.exists( os.path.join(directory_path, filename) ) \
+        else send_from_directory(os.path.join(os.getcwd(), 'proj','static'), 'notfound.png')
+
+
+@photoviewer.route('/remove_image/', methods=['POST'])
+def remove_image():
+    filename = str(request.form.get('filename'))
+    directory_path = str(session.get('submission_photos_dir'))
+    photopath = os.path.join(directory_path, filename)
+    try:
+        os.remove(photopath)
+        return jsonify(success=True)
+    except Exception as e:
+        print("Error deleting file:", str(e))
+        return jsonify(success=False), 500
 
