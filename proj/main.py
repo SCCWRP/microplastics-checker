@@ -274,7 +274,8 @@ def main():
             sheet_name = sheet,
             keep_default_na=False,
             skiprows = current_app.excel_offset,
-            na_values = ['']
+            na_values = [''],
+            converters = converters
         )
         for sheet in pd.ExcelFile(excel_path).sheet_names
         if ((sheet not in current_app.tabs_to_ignore) and (not sheet.startswith('lu_')))
