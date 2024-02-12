@@ -1601,7 +1601,7 @@ def microplastics(all_dfs):
     errs.append(
         checkData(
             tablename = 'tbl_mp_results',
-            badrows = results[ (results.sampletype == 'Lab blank') & (results.stationid != '0000')].tmp_row.tolist(),
+            badrows = results[ (results.sampletype == 'Lab blank') & (results.stationid.astype(str) != '0000')].tmp_row.tolist(),
             badcolumn = "stationid,sampletype",
             error_type = "Value Error",
             error_message = "If SampleType is Lab blank, then the StationID must be '0000'"
