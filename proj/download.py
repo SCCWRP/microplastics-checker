@@ -1,8 +1,8 @@
-import os, time
+import os, time, re
 from flask import send_file, Blueprint, jsonify, request, g, current_app, render_template, send_from_directory, g 
-import pandas as pd
 from pandas import read_sql, DataFrame
-import re
+import pandas as pd
+from sqlalchemy import create_engine
 
 download = Blueprint('download', __name__)
 @download.route('/download/<submissionid>/<filename>', methods = ['GET','POST'])
@@ -206,3 +206,70 @@ def data_query(export_name):
 
 
 
+
+@download.route("/intercal-data", methods=["POST", "GET"])
+def export():
+    eng = create_engine(os.getenv("INTERCAL_DB_CONNECTION_STRING"))
+
+    tablename = request.args.get("table")
+    lab = request.args.get("lab")
+    matrix = request.args.get("matrix")
+    
+    if tablename is None:
+        return "Tablename not provided."
+
+    # Double percent is needed when typing queries in python, in order to type a literal percent
+    # its like an escape character so python knows you are not trying to type a format string
+    if (tablename not in pd.read_sql("SELECT table_name FROM information_schema.tables WHERE table_name LIKE 'tbl_%%';", eng).table_name.values) and (tablename != 'sample_spiking_info'):
+        return "Invalid table name given"
+    
+    cols = pd.read_sql(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = '{}' AND column_name NOT IN ('{}') ".format(
+                tablename, 
+                "','".join(
+                    set(current_app.system_fields) - {'objectid'}
+                )
+            ),
+            eng
+        ) \
+        .column_name \
+        .values
+
+    sql = f"SELECT {','.join(cols)} FROM {tablename}"
+
+    # Matrix only applies to raw data results
+    if (matrix is not None) and (tablename in ('tbl_rawdataresults', 'sample_spiking_info')):
+        # 4 valid matrix types: Clean Water, Dirty Water, Fish Tissue and Sediment
+        if matrix.upper() in ("CW","DW","FT","SD"):
+            sql = f"{sql} WHERE UPPER(sampletype) = '{matrix.upper()}'"
+    
+    if lab: # is not None
+        if lab in pd.read_sql("SELECT DISTINCT labcode FROM lu_laboratories;", eng).labcode.values:
+            if "WHERE" in sql:
+                sql = f"{sql} AND UPPER(labid) = '{lab.upper()}'"
+            else:
+                sql = f"{sql} WHERE UPPER(labid) = '{lab.upper()}'"
+
+    # Tack on the semicolon just because
+    sql = f"{sql};"
+
+    # write this to csv somewhere and return send_file of that file you just wrote
+    path = f"{os.getcwd()}/export/{tablename}.csv"
+    data = pd.read_sql(sql, eng)
+    
+    lab_anonymizer = pd.read_sql("SELECT labcode, anonymous_labcode FROM lab_anonymizer;", eng)
+
+    if (str(request.args.get("anonymize")).lower() == 'false') or (tablename == 'sample_spiking_info'):
+        print("We will give unanonymized data")
+    else:
+        for col in data.columns:
+            if col not in ('labid','sampleid','particleid','photoid'):
+                continue
+            for old, new in zip(lab_anonymizer.labcode, lab_anonymizer.anonymous_labcode):
+                data[col] = data[col].str.replace(old,f'Lab{new}')
+
+    data.to_csv(path, index = False)
+
+
+    return send_file(path, as_attachment=True, download_name=f'{tablename}.csv')
+    
