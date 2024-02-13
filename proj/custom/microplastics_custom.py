@@ -1130,7 +1130,7 @@ def microplastics(all_dfs):
     args.update({
         "tablename": "tbl_mp_microscopysettings",
         "badrows": mismatch(
-            microscopysettings, 
+            microscopy, 
             sampleextraction, 
             mergecols = [x.lower() for x in sampleextract_microscopy_matchcols]
         ), 
@@ -1150,7 +1150,7 @@ def microplastics(all_dfs):
         "tablename": "tbl_mp_sampleextraction",
         "badrows": mismatch(
             sampleextraction, 
-            microscopysettings, 
+            microscopy, 
             mergecols = [x.lower() for x in sampleextract_microscopy_matchcols]
         ), 
         "badcolumn": ','.join(sampleextract_microscopy_matchcols),
@@ -2407,6 +2407,44 @@ def microplastics(all_dfs):
     )
 
     print("""# END OF CHECK - if filterholder is "Other" then the "comments" field cannot be left blank """)
+
+
+
+    print("""# CHECK - If filtertype is Not Applicable, then the corresponding Microscopysettings record must have a pickingprep value of Wet """)
+    # CHECK - If filtertype is Not Applicable, then the corresponding Microscopysettings record must have a pickingprep value of Wet (🛑 ERROR 🛑)
+
+    # Created Coder: Robert Butler
+    # Created Date: 2/13/2024
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    
+    sampleextract_microscopy_matchcols = ['stationid','sampledate','lab','matrix','sampletype','fieldreplicate','sampleid','labbatch','sizefraction' ]
+
+    extractmicroscopy = sampleextraction.merge(
+        microscopy, 
+        how = 'left', 
+        on = sampleextract_microscopy_matchcols,
+        suffixes = ('', '_micro')
+    )
+    
+    # Not Applicable and Wet should be lookup list values
+    badrows = extractmicroscopy[
+        (extractmicroscopy['filtertype'] == "Not Applicable") & 
+        (extractmicroscopy['pickingprep'] != 'Wet')
+    ].tmp_row.tolist()
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_sampleextraction',
+            badrows=badrows,
+            badcolumn='filtertype',
+            error_type='Value Error',
+            error_message='If filtertype is "Not Applicable", the "pickingprep" field for the corresponding Microscopy Settings record must be "Wet".'
+        )
+    )
+
+    print("""# END OF CHECK - If filtertype is Not Applicable, then the corresponding Microscopysettings record must have a pickingprep value of Wet """)
 
 
 
