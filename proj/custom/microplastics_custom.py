@@ -1115,6 +1115,57 @@ def microplastics(all_dfs):
     # -------------------------- END Relating Sample Extraction to Sample Receiving ----------------------------- #
 
 
+    # ---------------------------- Relating Sample Extraction to Microscopy settings ------------------------------- #
+
+    print("""# SampleExtraction must match MicroscopySettings on 'stationid','sampledate','lab','matrix','sampletype','fieldreplicate','sampleid','labbatch','sizefraction' (and Vice Versa)""")
+    # SampleExtraction must match MicroscopySettings on 'stationid','sampledate','lab','matrix','sampletype','fieldreplicate','sampleid','labbatch','sizefraction' (and Vice Versa) (🛑 ERROR 🛑)
+
+    sampleextract_microscopy_matchcols = ['stationid','sampledate','lab','matrix','sampletype','fieldreplicate','sampleid','labbatch','sizefraction' ]
+
+    # Created Coder: Robert Butler
+    # Created Date: 2/13/2024
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+    args.update({
+        "tablename": "tbl_mp_microscopysettings",
+        "badrows": mismatch(
+            microscopysettings, 
+            sampleextraction, 
+            mergecols = [x.lower() for x in sampleextract_microscopy_matchcols]
+        ), 
+        "badcolumn": ','.join(sampleextract_microscopy_matchcols),
+        "error_type": "Logic Error",
+        "error_message": f"Each record in MicroscopySettings must have a matching record in SampleExtraction. Records are matched on {', '.join(sampleextract_microscopy_matchcols)}"
+    })
+    errs = [*errs, checkData(**args)]
+
+    # Created Coder: Robert Butler
+    # Created Date: 2/13/2024
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    args.update({
+        "tablename": "tbl_mp_sampleextraction",
+        "badrows": mismatch(
+            sampleextraction, 
+            microscopysettings, 
+            mergecols = [x.lower() for x in sampleextract_microscopy_matchcols]
+        ), 
+        "badcolumn": ','.join(sampleextract_microscopy_matchcols),
+        "error_type": "Logic Error",
+        "error_message": f"Each record in SampleExtraction must have a matching record in MicroscopySettings. Records are matched on {', '.join(sampleextract_microscopy_matchcols)}"
+    })
+    errs = [*errs, checkData(**args)]
+
+
+    # END SampleExtraction must match MicroscopySettings on 'stationid','sampledate','lab','matrix','sampletype','fieldreplicate','sampleid','labbatch','sizefraction' (and Vice Versa) (🛑 ERROR 🛑)
+    print("""# END SampleExtraction must match MicroscopySettings on 'stationid','sampledate','lab','matrix','sampletype','fieldreplicate','sampleid','labbatch','sizefraction' (and Vice Versa)""")
+    
+    # -------------------------- END Relating Sample Extraction to Microscopy settings ----------------------------- #
+
+
 
 
     ############################################################################################################################################
