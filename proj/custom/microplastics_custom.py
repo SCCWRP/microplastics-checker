@@ -281,7 +281,7 @@ def microplastics(all_dfs):
         checkData(
             tablename = "tbl_mp_results",
             badrows = mismatch(
-                df1 = results[results['ftir'] == 'Yes'],
+                df1 = results[results['ftir'] == 'Yes'].drop_duplicates(subset=matchcols,keep='first'),
                 df2 = ftir,
                 mergecols = matchcols
             ), 
@@ -1465,27 +1465,52 @@ def microplastics(all_dfs):
 
 
 
-    print("""# CHECK - Length column should be from 0 to 5000um (non inclusive range)""")
-    # CHECK - Length column should be from 0 to 5000um (non inclusive range) (🛑 ERROR 🛑)
+    print("""# CHECK - Length column should be greater than 0 """)
+    # CHECK - Length column should be greater than 0 (🛑 ERROR 🛑)
     
     # Created Coder: Robert Butler
     # Created Date: 08/28/23
-    # Last Edited Date: 08/31/23
+    # Last Edited Date: 03/21/24
     # Last Edited Coder: Robert Butler
     # NOTE (08/31/23): made this an error rather than warning - Robert
+    # NOTE (03/21/24): NA Values should not be flagged as an error, per Leah, in this week of Mqrch 2024
+    #                  So in this check i filled in NA values with 1, which will prevent rows with missing values from being flagged
+    # NOTE (03/21/24): Per Leah - Warn for  >5000um - Error for <0um (now they are separate checks)
+
 
     errs.append(
         checkData(
             tablename = 'tbl_mp_results',
-            badrows = results[~results['length_um'].between(0, 5000, inclusive='neither')].tmp_row.tolist(),
+            badrows = results[results['length_um'].fillna(1) <= 0].tmp_row.tolist(),
             badcolumn = "Length_um",
             error_type = "Value Error",
-            error_message = "Length should be a number between 0 and 5000um (non-inclusive)"
+            error_message = "Length should be greater than zero"
         )
     )
-
-    # END OF CHECK - Length column should be from 0 to 5000um (non inclusive range) (🛑 ERROR 🛑)
-    print("""# END OF CHECK - Length column should be from 0 to 5000um (non inclusive range)""")
+    # END OF CHECK - Length column should be greater than 0 (🛑 ERROR 🛑)
+    print("""# END OF CHECK - Length column should be greater than 0""")
+    
+    
+    print("""# CHECK - Length column should be less than 5000um in most cases""")
+    # CHECK - Length column should be less than 5000um in most cases (🟡 WARNING 🟡)
+    
+    # Created Coder: Robert Butler
+    # Created Date: 03/21/24
+    # Last Edited Date: 03/21/24
+    # Last Edited Coder: Robert Butler
+    # NOTE (03/21/24): Per Leah - Warn for  >5000um - Error for <0um (now they are separate checks)
+    
+    warnings.append(
+        checkData(
+            tablename = 'tbl_mp_results',
+            badrows = results[results['length_um'].fillna(1) > 5000].tmp_row.tolist(),
+            badcolumn = "Length_um",
+            error_type = "Value Error",
+            error_message = "Length should usually be under 5000um"
+        )
+    )
+    # END OF CHECK - Length column should be less than 5000um in most cases (🟡 WARNING 🟡)
+    print("""# END OF CHECK - Length column should be less than 5000um in most cases""")
 
 
     print("""# CHECK - Width column shuold be from 0 to 5000 um (non inclusive range)""")
@@ -1493,15 +1518,17 @@ def microplastics(all_dfs):
     
     # Created Coder: Robert Butler
     # Created Date: 08/28/23
-    # Last Edited Date: 08/31/23
+    # Last Edited Date: 03/21/24
     # Last Edited Coder: Robert Butler
     # NOTE (08/31/23): Changed error_message to Width instead of Length - Nick
     # NOTE (08/31/23): made this an error rather than warning - Robert
+    # NOTE (03/21/24): NA Values should not be flagged as an error, per Leah, in this week of Mqrch 2024
+    #                  So in this check i filled in NA values with 1, which will prevent rows with missing values from being flagged
 
     errs.append(
         checkData(
             tablename = 'tbl_mp_results',
-            badrows = results[~results['width_um'].between(0, 5000, inclusive='neither')].tmp_row.tolist(),
+            badrows = results[~results['width_um'].fillna(1).between(0, 5000, inclusive='neither')].tmp_row.tolist(),
             badcolumn = "Width_um",
             error_type = "Value Error",
             error_message = "Width should be a number between 0 and 5000um (non-inclusive)"
