@@ -266,7 +266,7 @@ def export():
             if col not in ('labid','sampleid','particleid','photoid'):
                 continue
             for old, new in zip(lab_anonymizer.labcode, lab_anonymizer.anonymous_labcode):
-                data[col] = data[col].str.replace(old,f'Lab{new}')
+                data[col] = data[col].str.replace(old,f'{new}')
 
     data.to_csv(path, index = False)
 

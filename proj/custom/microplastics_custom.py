@@ -393,8 +393,9 @@ def microplastics(all_dfs):
     # There shouldnt be more than one lab in a submission but technically there can be
     # 08/28/23 changed tuple cast to joined list because tuple() returns something like ('value1',) when
     #   there's only one value in labinfo.lab.astype(str), which is a syntax error in SQL
+    
     instrumentinfo_db = pd.read_sql(
-        f"""SELECT * FROM tbl_mp_instrumentinfo WHERE lab IN ('{','.join(labinfo.lab.astype(str).tolist())}')""", 
+        f"""SELECT * FROM tbl_mp_instrumentinfo WHERE lab IN ('{"','".join(labinfo.lab.astype(str).unique().tolist())}')""", 
         g.eng
     )
     
@@ -410,7 +411,8 @@ def microplastics(all_dfs):
     # NOTE this may be used in later parts of this script as well, so i make it an uppercase 
     #   so those who read the code later on can see its almost like a global
     INSTRUMENTINFO_COMBINED = pd.concat([instrumentinfo, instrumentinfo_db], ignore_index=True)
-
+    
+    
     # Raman
     # Created Coder: Robert Butler
     # Created Date: 08/24/23
