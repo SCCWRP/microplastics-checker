@@ -303,7 +303,7 @@ def microplastics(all_dfs):
             ), 
             badcolumn = ','.join(matchcols),
             error_type = "Logic Error",
-            error_message = "There must be a corresponding record in the results table"
+            error_message = "There must be a corresponding record in the results table where 'FTIR' = 'Yes'"
         )
     ]
 
@@ -356,7 +356,7 @@ def microplastics(all_dfs):
             ), 
             badcolumn = ",".join(matchcols),
             error_type = "Logic Error",
-            error_message = "There must be a corresponding record in the results table"
+            error_message = "There must be a corresponding record in the results table where 'Stereoscope' = 'Yes'"
         )
     ]
 
