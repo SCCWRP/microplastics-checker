@@ -56,6 +56,10 @@ def main():
         if 'jpg' in extensions or 'png' in extensions:
             clear_directory(session['submission_photos_dir'])
 
+        # Set excel_path to None, in case they are submitting photos only
+        # They are not allowed to submit photos only, but if they try, we will not have an excel_path
+        # Therefore later in the script, we can check if excel_path is None, and return an error message
+        excel_path = None
         
         for f in files:
 
@@ -103,6 +107,9 @@ def main():
     #     return jsonify(user_error_msg=errmsg)
 
     print("DONE uploading files")
+
+    if excel_path is None:
+        return jsonify(user_error_msg="It appears no excel file was included in your submission. Please include an excel file in your submission.")
 
     # -------------------------------------------------------------------------- #
     
