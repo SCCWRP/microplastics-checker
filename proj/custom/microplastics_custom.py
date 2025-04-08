@@ -75,6 +75,31 @@ def microplastics(all_dfs):
     # ------------------------------------------------------------------------------------------------------------------ #
     ######################################################################################################################
 
+    # --------------------------- BEGIN General Logic Checks --------------------------- #
+    #
+    print("# CHECK - SampleDate cannot be from the future")
+    # CHECK - SampleDate cannot be from the future (🛑 ERROR 🛑)
+    # Created Coder: GitHub Copilot
+    # Created Date: 10/10/2023
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    current_date = pd.Timestamp(datetime.now().date())
+
+    errs = [
+        *errs,
+        checkData(
+            tablename='tbl_mp_results',
+            badrows=results[results['sampledate'] > current_date].tmp_row.tolist(),
+            badcolumn='SampleDate',
+            error_type='Logic Error',
+            error_message='SampleDate cannot be from the future.'
+        )
+    ]
+
+    # END OF CHECK - SampleDate cannot be from the future (🛑 ERROR 🛑)
+    print("# END OF CHECK - SampleDate cannot be from the future")
 
 
 
@@ -116,12 +141,13 @@ def microplastics(all_dfs):
     # Description: PhotoID required only for records where the polymerID is not 'Not measured' (🛑 ERROR 🛑)
     # Created Coder: Robert Butler
     # Created Date: 9/1/23
-    # Last Edited Date: NA
-    # Last Edited Coder: NA
-    # NOTE (MM/DD/YY): NA
+    # Last Edited Date: 12/5/2024
+    # Last Edited Coder: Robert
+    # NOTE (12/05/2024): Made it a warning for Rosaly from CSULB to submit her data
 
-    errs = [
-        *errs,
+
+    warnings = [
+        *warnings,
         checkData(
             tablename = "tbl_mp_results",
             badrows = results[
@@ -152,7 +178,9 @@ def microplastics(all_dfs):
     # print(pd.Series(uploaded_photoids))
     # print(results['photoid'])
     # print(pd.Series(uploaded_photoids).isin(results['photoid']))
+
     if not pd.Series(uploaded_photoids).isin(results['photoid']).all():
+        missing_photos_from_data = list(set(uploaded_photoids) - set(results.photoid.tolist()))
         errs = [
             *errs,
             checkData(
@@ -160,7 +188,7 @@ def microplastics(all_dfs):
                 badrows = results.tmp_row.tolist(), 
                 badcolumn = "PhotoID",
                 error_type = "Logic Error",
-                error_message = "All uploaded photos must have a matching PhotoID in mp_results tab"
+                error_message = f"The following uploaded photos were not found in the photoid column of your results: {', '.join(missing_photos_from_data)}"
             )
         ]
 
@@ -275,13 +303,18 @@ def microplastics(all_dfs):
     # NOTE (08/28/23): Removed if block since mismatch function handles empty dataframes already
     # NOTE (08/30/23): put the columns to match on in a variable called matchcols (Robert)
 
+    print("results[results['ftir'] == 'Yes']")
+    print(results[results['ftir'] == 'Yes'])
+    print("ftir")
+    print(ftir)
+
     matchcols = ['stationid', 'sampledate', 'lab', 'matrix', 'sampletype', 'sizefraction', 'labbatch', 'fieldreplicate']
     errs = [
         *errs,
         checkData(
             tablename = "tbl_mp_results",
             badrows = mismatch(
-                df1 = results[results['ftir'] == 'Yes'].drop_duplicates(subset=matchcols,keep='first'),
+                df1 = results[results['ftir'] == 'Yes'],
                 df2 = ftir,
                 mergecols = matchcols
             ), 
@@ -2671,6 +2704,30 @@ def microplastics(all_dfs):
     # ---------------------------------------------------------------------------------------------------------------------------------------------- #
     ##################################################################################################################################################
 
+    # 
+    print("""# CHECK - If SpectralCollectionMode = 'ATR' then CrystalType cannot be left blank""")
+    # CHECK - If SpectralCollectionMode = 'ATR' then CrystalType cannot be left blank (🛑 ERROR 🛑)
+    # Created Coder: GitHub Copilot
+    # Created Date: 10/10/2023
+    # Last Edited Date: NA
+    # Last Edited Coder: NA
+    # NOTE (MM/DD/YY): NA
+
+    errs.append(
+        checkData(
+            tablename='tbl_mp_ftirsettings',
+            badrows=ftir[
+                (ftir['spectracollectionmode'] == 'ATR') & 
+                (ftir['crystaltype'].fillna('').astype(str).str.replace("\s*","", regex=True) == '')
+            ].tmp_row.tolist(),
+            badcolumn='crystaltype',
+            error_type='Value Error',
+            error_message="If SpectraCollectionMode is 'ATR' then CrystalType cannot be left blank."
+        )
+    )
+
+    # END OF CHECK - If SpectraCollectionMode = 'ATR' then CrystalType cannot be left blank (🛑 ERROR 🛑)
+    print("""# END OF CHECK - If SpectraCollectionMode = 'ATR' then CrystalType cannot be left blank""")
 
 
     print("""# CHECK - SpectralRange should have a format of 'NUMBER-NUMBER' """)
