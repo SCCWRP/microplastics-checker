@@ -57,6 +57,17 @@ def microplastics(all_dfs):
     results['tmp_row'] = results.index
     sampleextraction['tmp_row'] = sampleextraction.index
     samplereceiving['tmp_row'] = samplereceiving.index
+    
+    
+    for df in [labinfo, instrumentinfo, microscopy, raman, ftir, results, sampleextraction, samplereceiving]:
+        try:
+            # floor the sampledate column to the nearest hour - avoids unnecessary logic errors and "mismatched" records
+            for c in df.columns:
+                if 'date' in c.lower():
+                    df[c] = pd.to_datetime(df[c], errors='coerce').dt.floor('h')
+        except Exception:
+            pass
+
 
     args = {
         "tablename": "",
@@ -345,7 +356,6 @@ def microplastics(all_dfs):
     #   Records must match on StationID, SampleDate, Lab, Matrix, SampleType, SizeFraction
     # (🛑 ERROR 🛑)
     print("# END OF CHECK - If FTIR = 'Yes' (in results table) then there must be a corresponding record in the ftirsettings table ")
-    
 
 
 
@@ -2072,8 +2082,8 @@ def microplastics(all_dfs):
 
     # Filter rows where StartDate is before the boundary or after the current date
     invalid_start_dates = labinfo[
-        (labinfo['startdate'] < start_date_boundary) | 
-        (labinfo['startdate'] > current_date)
+        (labinfo['startdate'].apply(lambda t: pd.Timestamp(t)) < start_date_boundary) | 
+        (labinfo['startdate'].apply(lambda t: pd.Timestamp(t)) > current_date)
     ].tmp_row.tolist()
 
     errs.append(
@@ -2095,7 +2105,7 @@ def microplastics(all_dfs):
 
     # Filter rows where EndDate is before StartDate
     invalid_end_dates = labinfo[
-        labinfo['enddate'] < labinfo['startdate']
+         pd.to_datetime(labinfo['startdate'], errors='coerce') > pd.to_datetime(labinfo['enddate'], errors='coerce')
     ].tmp_row.tolist()
 
     errs.append(
@@ -2557,8 +2567,8 @@ def microplastics(all_dfs):
     current_date = datetime.today()
 
     invalid_dates = samplereceiving[
-        (samplereceiving['datereceived'] < start_date) | 
-        (samplereceiving['datereceived'] > current_date)
+        ( pd.to_datetime(samplereceiving['datereceived'], errors = 'coerce') < start_date) | 
+        ( pd.to_datetime(samplereceiving['datereceived'], errors = 'coerce') > current_date)
     ].tmp_row.tolist()
 
     errs.append(
