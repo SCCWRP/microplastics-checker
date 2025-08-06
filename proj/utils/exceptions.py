@@ -38,8 +38,7 @@ def default_exception_handler(mail_from, errmsg, maintainers, project_name, logi
         maintainers,
         f"{project_name} Checker - Internal Server Error", 
         msgbody, 
-        filename = attachment,
-        server = mail_server
+        files = [attachment]
     )
     print("after send_mail function")
     return response
