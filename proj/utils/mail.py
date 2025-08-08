@@ -6,43 +6,62 @@ from email.utils import COMMASPACE, formatdate
 from email import encoders
 import smtplib
 from smtplib import SMTPException
+import boto3
 import pandas as pd
+import mimetypes
 
-# Function to be used later in sending email
-def send_mail(send_from, send_to, subject, text, filename=None, server="localhost"):
+# Send email with Amazon SES (instead of postfix)
+def send_mail(
+    send_from="dockerchecker@sccwrp.co",
+    send_to=[],
+    subject="",
+    body="",
+    files=None,
+    aws_region="us-west-2"
+):
+    if not send_to:
+        raise ValueError("Recipient list cannot be empty.")
+
+    # Create SES client
+    ses_client = boto3.client("ses", region_name=aws_region)
+
+    # Create the email message
     msg = MIMEMultipart()
-    
-    msg['From'] = send_from
-    msg['To'] = COMMASPACE.join(send_to)
-    print("----- MESSAGE TO ----")
-    print(msg['To'])
-    msg['Date'] = formatdate(localtime=True)
-    msg['Subject'] = subject
-    
-    msg_content = MIMEText(text)
-    msg.attach(msg_content)
-    
-    print(f"filename: {filename}")
-    if filename is not None:
-        print("filename IS NOT NONE")
-        attachment = open(filename,"rb")
-        p = MIMEBase('application','octet-stream')
-        p.set_payload((attachment).read())
-        encoders.encode_base64(p)
-        p.add_header('Content-Disposition','attachment; filename= %s' % filename.split("/")[-1])
-        msg.attach(p)
-        print(" done with if conditional within send_mail fcn")
-    try:
-        print("inside try to send the email")
-        smtp = smtplib.SMTP(server)
-        print(smtp)
-        smtp.sendmail(send_from, send_to, msg.as_string())
-        print("it sent the thing")
-        smtp.close()
-        print("it closed the thing")
-    except SMTPException:
-        print("Error: unable to send email")
+    msg["From"] = send_from
+    msg["To"] = ", ".join(send_to)
+    msg["Subject"] = subject
 
+    # Attach the email body
+    msg.attach(MIMEText(body, "plain"))
+
+    # Attach files if provided
+    if files:
+        for file_path in files:
+            try:
+                mime_type, _ = mimetypes.guess_type(file_path)
+                mime_type = mime_type or "application/octet-stream"
+                main_type, sub_type = mime_type.split("/", 1)
+
+                with open(file_path, "rb") as file:
+                    attachment = MIMEBase(main_type, sub_type)
+                    attachment.set_payload(file.read())
+
+                encoders.encode_base64(attachment)
+                attachment.add_header(
+                    "Content-Disposition", f'attachment; filename="{file_path.split("/")[-1]}"'
+                )
+                msg.attach(attachment)
+            except Exception as e:
+                print(f"Failed to attach {file_path}: {e}")
+
+    # Send email using AWS SES
+    response = ses_client.send_raw_email(
+        Source=send_from,
+        Destinations=send_to,
+        RawMessage={"Data": msg.as_string()},
+    )
+
+    return response
 
 def data_receipt(send_from, always_send_to, login_email, dtype, submissionid, originalfile, tables, eng, mailserver, login_info, cc = None, *args, **kwargs):
     """
@@ -79,7 +98,7 @@ def data_receipt(send_from, always_send_to, login_email, dtype, submissionid, or
         assert isinstance(cc, str), f'Invalid email address: {cc}'
         send_to.append(cc)
    
-    send_mail(send_from, send_to, email_subject, email_body, filename = originalfile, server = mailserver)
+    send_mail(send_from, send_to, email_subject, email_body, files = [originalfile])
 
 
 

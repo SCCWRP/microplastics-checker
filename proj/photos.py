@@ -12,8 +12,6 @@ import time
 from werkzeug.utils import secure_filename
 from zipfile import ZipFile
 
-
-
 from .utils.db import metadata_summary
 from .utils.generic import allowed_imagefile
 

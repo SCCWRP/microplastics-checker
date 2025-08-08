@@ -3,151 +3,86 @@
 #below is from microplastics
 #from flask import send_from_directory, render_template, request, redirect, Response, jsonify, send_file, json, current_app
 #below is from empa main.py
-from flask import request, current_app, Blueprint, g, send_file
+from flask import request, current_app, Blueprint, g, send_file, render_template, make_response
 from sqlalchemy import Table, MetaData
 import pandas as pd
 from pandas import DataFrame
 import re
 import os
-import openpyxl
+from openpyxl.utils import get_column_letter, quote_sheetname
+from openpyxl.styles import PatternFill, Font, Border, Side, Color
+from openpyxl.styles.alignment import Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.formatting.rule import FormulaRule
+from openpyxl.comments import Comment
+
+from io import BytesIO
+
+from .utils.db import primary_key, foreign_key_detail, foreign_keys
+
 # dynamic lookup lists to template
 # skip the formatting
 
 templater = Blueprint('templater', __name__)
+
+
+@templater.route('/templates', methods = ['GET', 'POST']) # this will be added to the index.html file to dynamically call the lookup lists to each template
 @templater.route('/templater', methods = ['GET', 'POST']) # this will be added to the index.html file to dynamically call the lookup lists to each template
 # consider using the app.datasets dictionary to generalize the code better
 def template():
     system_fields = current_app.system_fields
     datatype = request.args.get("datatype")
+
     if datatype not in current_app.datasets.keys():
-        return f"{datatype} not found"
+        if datatype is not None:
+            flash(f"Datatype {datatype} not found")
+        return render_template(
+            "templates.jinja2",
+            datasets = current_app.datasets,
+            project_name = current_app.project_name,
+            background_image = current_app.config.get("BACKGROUND_IMAGE")
+        )
+    
+    # All tables in the dataset
     tbls = current_app.datasets.get(datatype)['tables']
+    
     file_prefix = datatype.upper()
-    database_name = str(g.eng).replace(")","").split("/")[-1]
     print(current_app.datasets.keys())
 
     static_template = current_app.datasets.get(datatype).get('template_filename')
-    print("datatype")
-    print(datatype)
-    print("static_template")
-    print(static_template)
     if static_template is not None:
-        print("Static template")
-        return send_file(f"{os.getcwd()}/export/data_templates/{static_template}", as_attachment=True, download_name=f'{static_template}')
+        print("Static template requested")
+        return send_file(
+            os.path.join(os.getcwd(), "export", "data_templates", static_template), as_attachment=True, download_name=f'{static_template}'
+        )
     
     eng = g.eng
-    # intialize metadata
-    # intialize metadata
-    meta = MetaData()
-    # get primary and foreign keys
-    sql = eng.execute(
-        """
-        SELECT conrelid::regclass AS table_from, conname, pg_get_constraintdef(oid) 
-        FROM pg_constraint WHERE contype IN ('f', 'p') AND connamespace = 'sde'::regnamespace AND conname LIKE 'tbl%%' 
-        ORDER BY conrelid::regclass::text, contype DESC
-        """
-    )
-    sql_df = DataFrame(sql.fetchall())
-    sql_df.columns = sql.keys()
-    # df: datframe of tables and their primary and foreign keys
-    df = sql_df
-    del sql_df
 
-    df = df[df['table_from'].str[:4].str.contains('tbl_')]
-    grouped_df = df.groupby('table_from')
+    tabs_dict = {}
 
-    for key, item in grouped_df:
-        print(grouped_df.get_group(key), "\n\n")
-
-    descr_grouped_df = grouped_df.describe()
-    print(descr_grouped_df)
-
-
-    # initialize list for primary and foreign keys extracted from database
-    keys_from_db = []
-
-    for key, item in grouped_df:
-        if key in tbls:
-            print(key)
-            print(item['pg_get_constraintdef'])
-            keys_from_db.append(item['pg_get_constraintdef'])
-
-    list_of_keys = []
-    list_of_lu_needed = []
-
-    for fkey in keys_from_db:
-        print(f"fkey ----- {fkey}")
-
-        for lu in fkey:
-            print(f"lu --- {lu}")
-            print("appending list of keys: ")
-            list_of_keys.append(lu)
-    print("LIST OF KEY")
-    print(list_of_keys)
-
-    primarykeylist = list()
-    tmplist = list()
-
-    for line in list_of_keys:
-    
-        if "PRIMARY" in line:
-            print(line)
-            tmpprimary = line.split()[2:]
-            for primary in tmpprimary:
-                primary = re.sub('\(|\)|\,|', '', primary)
-                primarykeylist.append(primary)
-        for element in line.split():
-            if element.startswith('lu'):
-            
-                list_of_lu_needed.append(element.split('(')[0])
-            if element.startswith('('):
-                foreignkey = element.strip('()')
-                tmplist.append(foreignkey)
-
-    print("THIS IS FOREIGN KEY COLUMNS(TBLS) + PRIMARY KEY COLUMNS(LOOK_UP) LIST ")
-    print(tmplist)
-    # Currently at this point, the tmplist has only foreign key columns for the tabs/tbls. This list will be updated with the primary key columns(look-up list) later.
-    print("THIS IS PRIMARY KEY COLUMN(TBLS) LIST")
-    print(primarykeylist)
-    list_lu_needed = list(set(list_of_lu_needed))
-    print(list_of_lu_needed)
-
-    print("Building Templates and Adding all Lu list")
-    glossary = pd.DataFrame()
     for tbl in tbls:
-        df = pd.read_sql(
-            f"""
-            SELECT
-                cols.column_name as field_name,
-                    cols.data_type as field_type,
-                    (
-                    SELECT
-                        pg_catalog.col_description(c.oid, cols.ordinal_position::int)
-                    FROM
-                        pg_catalog.pg_class c
-                    WHERE
-                        c.oid = (SELECT ('"' || cols.table_name || '"')::regclass::oid)
-                        AND c.relname = cols.table_name
-                ) AS description
-            FROM
-                information_schema.columns cols
-            WHERE
-                cols.table_catalog    = '{database_name}'
-                AND cols.column_name NOT IN ({','.join([f"'{x}'" for x in system_fields])})
-                AND cols.table_name   = '{tbl}';
-            
-            """,
-            eng
-        )
-        df = df.assign(
-            sheet = pd.Series([tbl.replace("tbl_","").replace("microplastics_","") for _ in range(len(df))]),
-            template_prefix = pd.Series([f"{file_prefix}-TEMPLATE" for _ in range(len(df))])
-        )
-        df = df[['template_prefix','sheet', 'field_name', 'field_type','description' ]]
-        glossary = pd.concat([glossary, df],ignore_index=True)
-   
-
+        print('tbl')
+        print(tbl)
+        # foreign key detail returns a dictionary in records fashion rather than just columns and which tables they reference
+        # foreign key detail gives the name of the referenced column as well
+        
+        pkey_fields = primary_key(tbl, eng)
+        fkey_detail = foreign_key_detail(tbl, eng)
+        print('fkey_detail')
+        print(fkey_detail)
+        tabs_dict[tbl] = {
+            'pkey_fields' : pkey_fields,
+            'foreign_key_detail' : fkey_detail,
+            'foreign_key_tables' : list({info['referenced_table'] for info in fkey_detail.get(tbl, {}).values()}),
+            'constrained_columns' : list(fkey_detail.get(tbl, {}).keys())
+        }
+        
+        print("tabs dict")
+        print( tabs_dict[tbl] )
+    
+    lookup_tables = [t for v in tabs_dict.values() for t in v.get('foreign_key_tables')]
+    
+    # Build the dictionary which will be the main object that creates the data template
     xls = {
         **{
             'Instructions': pd.DataFrame(
@@ -164,7 +99,7 @@ def template():
             )
         },
         **{
-            table.replace("tbl_", "").replace("microplastics_",""): pd.DataFrame(
+            table: pd.DataFrame(
                 columns=
                 [
                     *[
@@ -180,195 +115,278 @@ def template():
                         if x not in system_fields
                     ]
                 ]
-            ) for table in tbls
+            ) for table in tbls # remember, tbls was defined towards the beginning, and represents all tables in the dataset
         },
         **{
-            'glossary': glossary
+            'glossary': pd.read_sql(f"""SELECT * FROM vw_template_glossary WHERE tablename IN ('{"','".join(tbls)}') ;""", eng)
         },
         **{
             lu_name: pd.read_sql(f"SELECT * from {lu_name}", eng).drop(columns=['objectid'], errors = 'ignore')
-            for lu_name in list(set(list_lu_needed))
+            for lu_name in list(set(lookup_tables))
         }
     }
+    
+    excel_blob = BytesIO()
+        
+    with pd.ExcelWriter(excel_blob, engine='openpyxl') as writer:
+        
+        # Set the correct font size for the column headers, according to the config file
+        try:
+            COLUMN_HEADER_FONT_SIZE = current_app.config.get("TEMPLATE_COLUMN_HEADER_FONT_SIZE", 12)
+            COLUMN_COMMENT_FONT_SIZE = current_app.config.get("TEMPLATE_COLUMN_COMMENT_FONT_SIZE", 12)
+        except Exception as e:
+            
+            print(
+                "Warning: Could not set custom header font size for data submission template - most likely there is an error in the app configuration (wrong datatype for TEMPLATE_COLUMN_HEADER_FONT_SIZE?)"
+            )
+            
+            COLUMN_HEADER_FONT_SIZE = 12
+            COLUMN_COMMENT_FONT_SIZE = 12
+        
+        # Get the custom column header fill
+        CUSTOM_COLUMN_HEADER_FILL = current_app.config.get("TEMPLATE_COLUMN_HEADER_FILL", None)
+        CUSTOM_COLUMN_HEADER_BORDER_COLOR = current_app.config.get("TEMPLATE_COLUMN_HEADER_BORDER_COLOR", "#000000")
+        
+        CUSTOM_COLUMN_COMMENT_FILL = current_app.config.get("TEMPLATE_COLUMN_COMMENT_FILL", None)
+        CUSTOM_COLUMN_COMMENT_BORDER_COLOR = current_app.config.get("TEMPLATE_COLUMN_COMMENT_BORDER_COLOR", "#000000")
+        
+        # Gray highlight format
+        FKEY_HIGHLIGHT = PatternFill(start_color="D7D6D6", end_color="D7D6D6", fill_type="solid")
+        PKEY_BOLD_FONT = Font(bold=True,size=COLUMN_HEADER_FONT_SIZE)
+        
+        try:
+            rotation = int(current_app.config.get("TEMPLATE_COLUMN_HEADER_ROTATION", 90))
+            COL_HEADER_ROTATION = Alignment(text_rotation = rotation , horizontal='center', vertical='center')
+        except Exception as e:
+            print("Warning: Couldnt set custom column header rotation - likely an error in the app configuration - defaulting to 90")
+            COL_HEADER_ROTATION = Alignment(text_rotation=90, horizontal='center', vertical='center')
+            
+        
+        # Define a light red fill
+        DATA_VALIDATION_ERROR_FILL = PatternFill(start_color="FFCCCB", end_color="FFCCCB", fill_type="solid")
 
-    # Reorder columns of tbls
-    # print("Re-ordering columns")
-    # column_order = pd.read_sql("SELECT * from column_order", eng)
-    # column_order = dict(zip(column_order['table_name'],column_order['column_order']))
-    # for key in xls.keys():
-    #     tab_name = f"tbl_{key}"
-    #     if tab_name in tbls:
-    #         df = xls[key]
-    #         print("Before reordering:", df.columns, sep="\n")
-    #         print(tab_name)
-    #         correct_field_order = column_order.get(tab_name, None).split(",")
-    #         print("correct_field_order",correct_field_order,sep="\n")
-    #         if correct_field_order is not None:
-    #             df = df[[x for x in correct_field_order if x in df.columns] + [x for x in df.columns if x not in correct_field_order]]
-    #             xls[key] = df
-    #             print("After reordering:", df.columns, sep="\n")
+        # Fetch column comments if config option is True
+        INCLUDE_COMMENTS = current_app.config.get("INCLUDE_COLUMN_COMMENTS", False)
+        
+        # Start the offset at 0, add one 
+        COMMENT_OFFSET = int(INCLUDE_COMMENTS)
+        
 
-    # print("Done reordering columns")
-    ############################################################################################################################
-    ### Legacy code. I wrote them when I first started SCCWRP and worked on this project. They are not optimized, but still work.
-    ### I will improve the code when I have time - Duy 10/11/22
-     ############################################################################################################################
-    print("Finished building templates and adding all Lu list")
-    lookup_list = pd.read_sql(
-        "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE 'lu%%'", 
-        eng
-    )
-    lookup_list = lookup_list['table_name'].tolist()
-
-    primarykey = dict()
-
-    def findprimary(x):
-        for i in lookup_list:
-            s = Table(i, meta, autoload=True, autoload_with=eng)
-            lpkeys = list()
-            for pk in s.primary_key:
-                pri = pk.name
-                lpkeys.append(pri)
-                primarykey[i] = lpkeys
-        pkeytable = pd.DataFrame.from_dict(primarykey, orient='index')
-        pkeytable.reset_index(level=0, inplace=True)
-        for i in pkeytable.columns:
-            if i == 'index':
-                pkeytable.rename(columns={i: "table"}, inplace=True)
-            else:
-                pkeytable.rename(
-                    columns={i: "primarycolumn_" + str(i)}, inplace=True)
-        pkeytable = pkeytable.sort_values('table')
-        return pkeytable
-
-
-    pkeytable = findprimary(lookup_list)
-    print("-----------------------------")
-    print(" Printing pkey table below...")
-    print("-----------------------------")
-    print(pkeytable)
+        # Write each DataFrame to the appropriate sheet
+        for sheetname, df in xls.items():
+            
+            # For the actual sheets where they will fill in their data, we dont want to write the column headers here
+            df.to_excel(writer, sheet_name=sheetname, index=False, header = (not sheetname.startswith('tbl_')) )
 
 
-    def highlight_primary_key_column(dict):
-        columns_to_highlight = list()
-        for i in dict.keys():
-            for index, row in pkeytable.iterrows():
-                if i == row['table']:
-                    df = dict[i]
-                    for ii in df.columns:
-                        if ii == row['primarycolumn_0']:
-                            columns_to_highlight.append(ii)
-        print(columns_to_highlight)
-        return columns_to_highlight
-
-
-    # RETRIEVE LOOKUP LISTS FROM THE DATABASE
-    ###################
-    columnlist = list()
-    columndict = dict()
-    for i, lu_list in enumerate(list_of_lu_needed):
-        # It's easier to use pd.read_sql in my opinion
-        sql_df = pd.read_sql("SELECT * FROM " + lu_list, eng)
-        print("retrieved sql_df for lookups...")
-        # sql_df = sql_df[[x for x in sql_df.columns if x not in app.system_fields]] # no app.system_fields here
-        sql_df = sql_df[[x for x in sql_df.columns if x not in system_fields]]
-        templater = dict({lu_list: sql_df})
-        columns_to_highlight = highlight_primary_key_column(templater)
-        # columnlist is the primary keys for the lu lists
-        columnlist.extend(columns_to_highlight)
-        for value in columns_to_highlight:
-            test = dict()
-            test[columns_to_highlight[0]] = sql_df[value]
-            columndict.update(test)
-    columnlist.extend(tmplist)
-
-    print("exporting to original_df to excel file")
-
-    print("==================================================")
-    print("==================================================")
-    print("==================================================")
-
-    excel_file = f"{os.getcwd()}/export/data_templates/{file_prefix}-TEMPLATE.xlsx"
-    excel_writer = pd.ExcelWriter(excel_file, engine='xlsxwriter')
-
-
-    for i, sheet in enumerate(xls.keys()):
-
-        xls[sheet].to_excel(excel_writer, sheet_name=sheet,
-                                startrow=1, index=False, header=False)
-        workbook = excel_writer.book
-        worksheet = excel_writer.sheets[sheet]
-        # bold indicated foreign keys, otherwise not bold
-        # format 1 is for FOREIGN KEY COLUMNS
-        format1 = workbook.add_format(
-            {'bold': False, 'text_wrap': True, 'fg_color': '#D7D6D6'})
-        format1.set_align('center')
-        format1.set_align('vcenter')
-        format1.set_rotation(90)
-        # format 2 is for REGULAR COLUMNS
-        format2 = workbook.add_format({'bold': False, 'text_wrap': True})
-        format2.set_align('center')
-        format2.set_align('vcenter')
-        format2.set_rotation(90)
-        # format 3 is for PRIMARY KEY COLUMNS
-        format3 = workbook.add_format({'bold': True, 'text_wrap': True})
-        format3.set_align('center')
-        format3.set_align('vcenter')
-        format3.set_rotation(90)
-        # format 4 is for PRIMARY KEY AND ALSO FOREIGN KEY COLUMNS
-        format4 = workbook.add_format(
-            {'bold': True, 'text_wrap': True, 'fg_color': '#D7D6D6'})
-        format4.set_align('center')
-        format4.set_align('vcenter')
-        format4.set_rotation(90)
-        if sheet == 'Instructions':
-            print(f"sheet: {sheet}")
-            continue
-        for col_num, col_name in enumerate(xls[sheet].columns.values):
-            if (col_name.lower() in primarykeylist) & (col_name.lower() not in columnlist):
-                worksheet.write(0, col_num, col_name, format3)
-                worksheet.set_row(0, 170)
-            elif (col_name.lower() in primarykeylist) & (col_name.lower() in columnlist):
-                worksheet.write(0, col_num, col_name, format4)
-                worksheet.set_row(0, 170)
-            elif (col_name.lower() in columnlist) & (col_name.lower() not in primarykeylist):
-                worksheet.write(0, col_num, col_name, format1)
-                worksheet.set_row(0, 170)
-            else:
-                worksheet.write(0, col_num, col_name, format2)
-                worksheet.set_row(0, 170)
-    del i, sheet
-    excel_writer.save()
-
-
-    grouped_df = glossary.groupby(['sheet'])
-    gb_df = grouped_df.groups
-    key_df = gb_df.keys()
-
-    wb = openpyxl.load_workbook(excel_file)
-
-    for key, values in gb_df.items():
-        sh = wb[key.lower()]
-        tmp = glossary[glossary['sheet'] == key]
-        field_df_dict = dict(zip(tmp['field_name'].apply(lambda x: x.lower()), tmp['description']))
-        n = len(tmp.field_name.tolist())
-        for row in sh.iter_rows(min_row=1, min_col=1, max_row=1, max_col=n):
-            for cell in row:
+        # Iterate over each sheet in the workbook
+        for sheet in writer.sheets:
+            # Access the active worksheet
+            worksheet = writer.sheets[sheet]
+            
+            # Get the DataFrame corresponding to this sheet
+            df = xls[sheet]
+            
+            if sheet in tabs_dict.keys():
                 
-                dv = DataValidation()
-                s = str(field_df_dict.get(cell.value,None)) 
-                dv.prompt = s
-                sh.add_data_validation(dv)
-               
-                dv.add(cell)
-                print("data validation description added to cell")
+                if INCLUDE_COMMENTS:
+                    
+                    # Grab the column comments from the database
+                    column_comments = get_column_comments(sheet, eng)
+                    comment_map = column_comments.set_index('column_name')['column_comment'].to_dict()
 
-    wb.save(excel_file)
-    wb.close()
+                    # Create a new DataFrame with comments as the first row
+                    comment_row = [comment_map.get(col, '') for col in df.columns]
+                    
+                    worksheet.insert_rows(1)
+                    
+                    # Write the new row to the first row
+                    for col_idx, value in enumerate(comment_row, start = 1):
+                        cell = worksheet.cell(row = 1, column = col_idx)
+                        cell.value = value
+                        
+                        # Apply text wrap to the comment cells
+                        cell.alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
+                        
+                        # If app config has a custom column comment fill, set it
+                        if CUSTOM_COLUMN_COMMENT_FILL is not None:
+                            CUSTOM_COLUMN_COMMENT_FILL = str(CUSTOM_COLUMN_COMMENT_FILL).replace("#","").upper()
+                            try:
+                                cell = worksheet.cell(row = 1, column = col_idx)
+                                cell.fill = PatternFill(start_color = CUSTOM_COLUMN_COMMENT_FILL, end_color = CUSTOM_COLUMN_COMMENT_FILL, fill_type = "solid")
+                            except Exception as e:
+                                print("Couldn't set custom column header fill - likely an error in app configuration")
+                                print("Here is the exception message:")
+                                print(e)
+                        
+                        # set font size for the comments
+                        cell.font = Font(bold=False,size=COLUMN_COMMENT_FONT_SIZE)
+                        
+                        # Stick borders on the column comments
+                        CUSTOM_COLUMN_COMMENT_BORDER_COLOR = str(CUSTOM_COLUMN_COMMENT_BORDER_COLOR).replace("#","").upper()
+                        border_style = Side(border_style="thin", color=CUSTOM_COLUMN_COMMENT_BORDER_COLOR)
+                        # Create the full border using the defined sides
+                        border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
+                        # stick the border on the cell
+                        cell = worksheet.cell(row = 1, column = col_idx)
+                        cell.border = border
+                    
+                # Write the column headers
+                for col_idx, value in enumerate( list(df.columns), start = 1 ):
+                    cell = worksheet.cell(row = 1 + COMMENT_OFFSET, column = col_idx)
+                    cell.value = value
+                    
+                    max_length = len(str(value))
+                    
+                    # Give a little bit of a cushion - a bit more if there are comments
+                    worksheet.column_dimensions[worksheet.cell(row= 1 + COMMENT_OFFSET, column = col_idx).column_letter].width = max_length + (5 * (1 + (COMMENT_OFFSET*2) ) )
+                
+                
+                tmp_pkey_cols = tabs_dict.get(sheet).get('pkey_fields', [])
+                tmp_constrained_cols = tabs_dict.get(sheet).get('constrained_columns', [])
+                tmp_fkey_details = tabs_dict.get(sheet).get('foreign_key_detail', {})
+                
+                # Create a dictionary to map column names to their 1-based indices
+                col_indices = {col: idx + 1 for idx, col in enumerate(df.columns)}
+                
+                # Get the column indices for primary key fields (1-based index)
+                pkey_bold_col_indices = [col_indices[col] for col in tmp_pkey_cols]
+                non_pkey_col_indices = [col_indices[col] for col in list(set(df.columns) - set(tmp_pkey_cols))]
+                
+                # Get the column indices for foreign key fields (1-based index)
+                fkey_highlighted_cols = [col_indices[col] for col in tmp_constrained_cols]
+                
+                # Apply formatting for primary key columns (bold font)
+                for col_idx in pkey_bold_col_indices:
+                    worksheet.cell(row=1 + COMMENT_OFFSET, column=col_idx).font = PKEY_BOLD_FONT
+                
+                # Apply formatting for NON primary key columns (NON bold font)
+                for col_idx in non_pkey_col_indices:
+                    
+                    worksheet.cell(row=1 + COMMENT_OFFSET, column=col_idx).font = Font(bold=False,size=COLUMN_HEADER_FONT_SIZE)
+                    
+                
+                # Apply formatting for foreign key columns (gray highlight)
+                for col_idx in fkey_highlighted_cols:
+                    worksheet.cell(row=1 + COMMENT_OFFSET, column=col_idx).fill = FKEY_HIGHLIGHT
+                    
+                    # Get the relevant foreign key details
+                    column_name = df.columns[col_idx - 1]
+                    foreign_key_info = tmp_fkey_details.get(sheet, dict()).get(column_name)
+                    
+                    if foreign_key_info is not None:
+                    
+                        # col_idx is the index for the excel sheet, which is a 1 based index
+                        referenced_table = tmp_fkey_details.get(sheet).get(df.columns[ col_idx - 1 ]).get('referenced_table')
+                        referenced_column = tmp_fkey_details.get(sheet).get(df.columns[ col_idx - 1 ]).get('referenced_column')
+                        
+                        # Add a comment to the header indicating the lookup table
+                        header_cell = worksheet.cell(row=1 + COMMENT_OFFSET, column=col_idx)
+                        comment_text = f"References {referenced_table}.{referenced_column}"
+                        header_cell.comment = Comment(text=comment_text, author="System")
+                        
+                        
+                        
+                        referenced_sheetname = quote_sheetname(referenced_table)
+                        referenced_sheet_column_letter = get_column_letter(xls.get(referenced_table).columns.get_loc(referenced_column) + 1)
+                        
+                        # Find the last row in the referenced table's worksheet
+                        referenced_sheet = writer.sheets[referenced_table]
+                        max_ref_row = referenced_sheet.max_row
+                        
+                        dv = DataValidation(
+                            type="list",
+                            formula1=f"={referenced_sheetname}!${referenced_sheet_column_letter}$2:${referenced_sheet_column_letter}${max_ref_row}",
+                            allow_blank = True
+                        )
+                        
+                        
+                        dv.error ='Your entry is not in the list'
+                        dv.errorTitle = 'Invalid Entry'
+                        
+                        
+                        # Convert column index to Excel column letter
+                        col_letter = get_column_letter(col_idx)
+                        
+                        # Apply the validation to the entire column, starting from row 2 + COMMENT_OFFSET
+                        dv.add(f"{col_letter}{2 + COMMENT_OFFSET}:{col_letter}1048576")
+                        
+                        worksheet.add_data_validation(dv)
+                        
+                        # Apply Conditional Formatting to highlight invalid entries
+                        formula = f'=AND({col_letter}{2 + COMMENT_OFFSET}<>"", COUNTIF({referenced_sheetname}!${referenced_sheet_column_letter}$2:${referenced_sheet_column_letter}${max_ref_row},{col_letter}{2 + COMMENT_OFFSET})=0)'
+
+                        worksheet.conditional_formatting.add(
+                            f"{col_letter}{2 + COMMENT_OFFSET}:{col_letter}1048576",
+                            FormulaRule(formula=[formula], fill=DATA_VALIDATION_ERROR_FILL)
+                        )
+
+
+                # Apply final styling for the column headers
+                for col_idx in range(1, len(df.columns) + 1):  # Use 1-based indexing
+                    
+                    # define the cell object that we will apply styling to
+                    cell = worksheet.cell(row=1 + COMMENT_OFFSET, column=col_idx)
+                    
+                    # Apply rotation and centering to all column headers
+                    cell.alignment = COL_HEADER_ROTATION
+                    
+                    # If app config has a custom column header fill, set it - overriding the previously set ones for the foreign keys, etc.
+                    if CUSTOM_COLUMN_HEADER_FILL is not None:
+                        CUSTOM_COLUMN_HEADER_FILL = str(CUSTOM_COLUMN_HEADER_FILL).replace("#","").upper()
+                        try:
+                            cell = worksheet.cell(row = 1 + COMMENT_OFFSET, column = col_idx)
+                            cell.fill = PatternFill(start_color = CUSTOM_COLUMN_HEADER_FILL, end_color = CUSTOM_COLUMN_HEADER_FILL, fill_type = "solid")
+                        except Exception as e:
+                            print("Couldn't set custom column header fill - likely an error in app configuration")
+                            print("Here is the exception message:")
+                            print(e)
+                    
+                        
+                    
+                    # Border
+                    try:
+                        # Apply custom border - default it to black
+                        CUSTOM_COLUMN_HEADER_BORDER_COLOR = str(CUSTOM_COLUMN_HEADER_BORDER_COLOR).replace("#","").upper()
+                        
+                        border_style = Side(border_style="thin", color=CUSTOM_COLUMN_HEADER_BORDER_COLOR)
+                        
+                        # Create the full border using the defined sides
+                        border = Border(left=border_style, right=border_style, top=border_style, bottom=border_style)
+
+                        # stick the border on the cell
+                        cell = worksheet.cell(row = 1 + COMMENT_OFFSET, column = col_idx)
+                        cell.border = border
+                        
+                    except Exception as e:
+                        print("Couldn't set column border - likely an error in app configuration")
+                        print("Here is the exception message:")
+                        print(e)
+                            
+            
+            else:
+                # Set the column widths based on max length in column
+                for column_cells in worksheet.columns:
+                    max_length = max(len(str(cell.value)) if cell.value is not None else 0 for cell in column_cells[0:])
+                    adjusted_width = max_length + 5  # Add cushion for a little extra space
+                    worksheet.column_dimensions[column_cells[0].column_letter].width = adjusted_width
+
+                # Apply filters to the specified header row
+                if worksheet.max_row >= 0:  # Check if the header_row is within the data range
+                    worksheet.auto_filter.ref = f"{worksheet.dimensions.split(':')[0]}:{worksheet.dimensions.split(':')[1]}"
+
     ############################################################################################################################
     ############################################################################################################################
-    return send_file(f"{os.getcwd()}/export/data_templates/{file_prefix}-TEMPLATE.xlsx", as_attachment=True, download_name=f'{file_prefix}-TEMPLATE.xlsx')
+    
+    # set blob to the beginning
+    excel_blob.seek(0)
+    
+    # Make a response object to set a custom cookie
+    resp = make_response(send_file(excel_blob, as_attachment=True, download_name=f'{file_prefix}-TEMPLATE.xlsx'))
 
+    # Set a cookie to let browser know that the file has been sent
+    resp.set_cookie('template_file_sent', 'true', max_age=1)
 
+    print("End Templater")
 
-
+    return resp

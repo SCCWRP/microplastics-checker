@@ -95,7 +95,6 @@ def scraper_error_handler(error):
         current_app.mail_from, 
         current_app.maintainers, 
         "Exception in fetching lookup lists - scraper.py", 
-        str(error),
-        server = current_app.config['MAIL_SERVER']
+        str(error)
     )
     return "exception occurred trying to fetch lookup list"
